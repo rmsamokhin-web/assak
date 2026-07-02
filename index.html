@@ -1,0 +1,2686 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Юр. Касса</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+  :root {
+    --bg: #0f1117;
+    --surface: #181c27;
+    --surface2: #1e2436;
+    --border: #2a3048;
+    --accent: #6c8cff;
+    --green: #34d399;
+    --red: #f87171;
+    --yellow: #fbbf24;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --p1: #6c8cff;
+    --p2: #a78bfa;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; user-select: none; -webkit-user-select: none; cursor: default; }
+  input, textarea, select { user-select: text; -webkit-user-select: text; cursor: text; }
+
+  header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 14px 28px; display: flex; align-items: center; gap: 14px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .sync-dot {
+    width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0;
+    transition: background .3s;
+  }
+  .sync-dot.ok      { background: var(--green); }
+  .sync-dot.loading { background: var(--yellow); animation: pulse .8s infinite; }
+  .sync-dot.err     { background: var(--red); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  header h1 { font-size: 16px; font-weight: 700; letter-spacing: -.4px; }
+  .header-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+  .tabs { display: flex; gap: 4px; margin-left: 20px; }
+  .tab { background: none; border: 1px solid transparent; color: var(--muted); padding: 5px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-family: inherit; transition: all .15s; }
+  .tab:hover, .tab.active { color: var(--text); background: var(--surface2); border-color: var(--border); }
+
+  .main { max-width: 1280px; margin: 0 auto; padding: 24px 20px; display: flex; flex-direction: column; gap: 20px; }
+
+  /* CARDS */
+  .cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .card .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); margin-bottom: 6px; }
+  .card .val { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 600; }
+  .card .sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .green { color: var(--green); } .red { color: var(--red); } .yellow { color: var(--yellow); }
+  .cp1 { color: var(--p1); } .cp2 { color: var(--p2); }
+
+  /* TWO-COL */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+  /* PERSON CARDS */
+  .person-card { background: var(--surface); border-radius: 10px; overflow: hidden; }
+  .person-card.p1 { border: 1px solid rgba(108,140,255,.35); }
+  .person-card.p2 { border: 1px solid rgba(167,139,250,.35); }
+  .person-head { padding: 12px 18px; font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+  .person-head.p1 { background: rgba(108,140,255,.08); color: var(--p1); }
+  .person-head.p2 { background: rgba(167,139,250,.08); color: var(--p2); }
+  .person-body { padding: 14px 18px; display: flex; flex-direction: column; gap: 8px; }
+  .stat-row { display: flex; justify-content: space-between; font-size: 13px; }
+  .stat-row .sl { color: var(--muted); }
+  .stat-row .sv { font-family: 'JetBrains Mono', monospace; }
+
+  /* DEBT */
+  .debt-block { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+  .debt-block h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin-bottom: 12px; }
+  .debt-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; gap: 12px; }
+  .debt-row:last-child { border-bottom: none; }
+
+  /* SECTION */
+  .section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .section-head { padding: 12px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+
+  .badge { font-size: 10px; padding: 2px 7px; border-radius: 20px; background: var(--surface2); color: var(--muted); border: 1px solid var(--border); font-weight: 600; }
+
+  /* INLINE FORM */
+  .inline-form { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 18px; background: var(--surface2); border-bottom: 1px solid var(--border); align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 3px; }
+  .field label { font-size: 9px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+  .field input, .field select { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px 9px; font-size: 13px; font-family: inherit; outline: none; transition: border-color .15s; }
+  .field input:focus, .field select:focus { border-color: var(--accent); }
+  .field input[type=number] { width: 120px; font-family: 'JetBrains Mono', monospace; }
+  .field input[type=text] { width: 180px; }
+  .field input[type=date] { width: 135px; }
+  input[type=date]::-webkit-calendar-picker-indicator {
+    filter: invert(0.8);
+    cursor: pointer;
+  }
+  .month-tab {
+    background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+    padding: 5px 14px; border-radius: 7px; font-size: 12px; cursor: pointer;
+    transition: all .15s; font-family: inherit;
+  }
+  .month-tab:hover { border-color: var(--accent); color: var(--text); }
+  .month-tab.active { background: rgba(108,140,255,.15); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .field select { width: 150px; }
+
+  /* BUTTONS */
+  .btn { background: var(--accent); color: #fff; border: none; padding: 7px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: opacity .15s; align-self: flex-end; white-space: nowrap; }
+  .btn:hover { opacity: .82; }
+  .btn.ghost { background: none; border: 1px solid var(--border); color: var(--muted); font-weight: 400; }
+  .btn.ghost:hover { color: var(--text); border-color: var(--text); }
+  .btn.sm { padding: 4px 10px; font-size: 11px; font-weight: 500; }
+  .btn.danger { background: var(--red); }
+  .btn.green-btn { background: var(--green); color: #0f1117; }
+
+  /* TABLE */
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 9px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); padding: 9px 18px; text-align: left; border-bottom: 1px solid var(--border); font-weight: 500; }
+  td { padding: 9px 18px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: middle; cursor: default; }
+  tr:last-child td { border-bottom: none; }
+
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  .tag { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; background: var(--surface2); border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+  .tag.split { background: rgba(52,211,153,.1); border-color: rgba(52,211,153,.3); color: var(--green); }
+  .tag.pooled { background: rgba(108,140,255,.1); border-color: rgba(108,140,255,.3); color: var(--accent); }
+
+  .type-badge { display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 4px; font-weight: 700; white-space: nowrap; }
+  .income-badge { background: rgba(52,211,153,.12); border: 1px solid rgba(52,211,153,.3); color: var(--green); }
+  .expense-badge { background: rgba(248,113,113,.12); border: 1px solid rgba(248,113,113,.3); color: var(--red); }
+  .debt-badge { background: rgba(251,191,36,.12); border: 1px solid rgba(251,191,36,.3); color: var(--yellow); }
+  .muted-date { color: var(--muted); font-size: 11px; }
+
+  .del-btn { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 15px; line-height: 1; padding: 2px 4px; transition: color .15s; }
+  .del-btn:hover { color: var(--red); }
+  .edit-btn { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 13px; line-height: 1; padding: 2px 5px; transition: color .15s; }
+  .edit-btn:hover { color: var(--accent); }
+  .save-btn { background: none; border: 1px solid rgba(52,211,153,.4); cursor: pointer; color: var(--green); font-size: 11px; padding: 3px 8px; border-radius: 4px; font-family: inherit; transition: all .15s; }
+  .save-btn:hover { background: rgba(52,211,153,.1); }
+  .cancel-btn { background: none; border: 1px solid var(--border); cursor: pointer; color: var(--muted); font-size: 11px; padding: 3px 8px; border-radius: 4px; font-family: inherit; transition: all .15s; margin-left: 4px; }
+  .cancel-btn:hover { color: var(--text); }
+  .edit-input { background: var(--bg); border: 1px solid var(--accent); color: var(--text); border-radius: 5px; padding: 4px 7px; font-size: 13px; font-family: inherit; outline: none; width: 100%; min-width: 60px; }
+  .edit-input.num { font-family: 'JetBrains Mono', monospace; width: 110px; }
+  .edit-input.dt  { width: 120px; }
+  tr.editing td { background: rgba(108,140,255,.05) !important; }
+
+  .empty { text-align: center; color: var(--muted); padding: 24px; font-size: 13px; }
+
+  /* JOURNAL HEADER */
+  .journal-head { display: flex; align-items: center; gap: 8px; padding: 12px 18px; border-bottom: 1px solid var(--border); }
+  .journal-title { font-size: 13px; font-weight: 600; }
+  .journal-actions { margin-left: auto; }
+
+  /* DISTRIBUTION GROUPS */
+  .group-header td {
+    background: rgba(108,140,255,.06) !important;
+    border-top: 2px solid rgba(108,140,255,.25) !important;
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+  }
+  .group-member td {
+    background: rgba(108,140,255,.03) !important;
+    opacity: .75;
+  }
+  .group-member td:first-child { border-left: 2px solid rgba(108,140,255,.2); padding-left: 16px; }
+  .group-result td {
+    background: rgba(52,211,153,.06) !important;
+    border-bottom: 2px solid rgba(108,140,255,.2) !important;
+  }
+  .group-result td:first-child { border-left: 2px solid rgba(108,140,255,.2); padding-left: 16px; }
+  .group-tail td {
+    background: rgba(251,191,36,.05) !important;
+    border-bottom: 2px solid rgba(108,140,255,.2) !important;
+  }
+  .group-tail td:first-child { border-left: 2px solid rgba(108,140,255,.2); padding-left: 16px; }
+  .result-label { font-size: 12px; color: var(--muted); }
+  .result-values { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; }
+  .result-values span { font-family: 'JetBrains Mono', monospace; }
+  .undo-btn { background: none; border: 1px solid rgba(248,113,113,.4); color: var(--red); font-size: 11px; padding: 3px 9px; border-radius: 4px; cursor: pointer; font-family: inherit; transition: all .15s; white-space: nowrap; }
+  .undo-btn:hover { background: rgba(248,113,113,.1); }
+
+  /* SETTINGS ROW */
+  .settings-row { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+  .divider { width: 1px; background: var(--border); align-self: stretch; margin: 0 4px; }
+
+  /* MODAL */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.75);
+    z-index: 500; align-items: center; justify-content: center; gap: 20px;
+    padding: 20px;
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 24px 28px; width: 440px; max-width: 95vw;
+    box-shadow: 0 24px 64px rgba(0,0,0,.5);
+    transition: opacity .2s;
+  }
+
+  .modal h2 { font-size: 15px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+  /* section inside modal */
+  .ms { margin-bottom: 16px; }
+  .ms-title { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin-bottom: 8px; }
+  .ms-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,.04); gap: 8px; }
+  .ms-row:last-child { border-bottom: none; }
+  .ms-row .ml { color: var(--muted); flex: 1; min-width: 0; }
+  .ms-row .mv { font-family: 'JetBrains Mono', monospace; font-weight: 600; white-space: nowrap; min-width: 110px; text-align: right; }
+  .ms-row .mv.green { color: var(--green); }
+  .ms-row .mv.red   { color: var(--red); }
+  .ms-row .mv.yellow{ color: var(--yellow); }
+  .ms-row .mv.p1c   { color: var(--p1); }
+  .ms-row .mv.p2c   { color: var(--p2); }
+
+  .ms-block { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 5px; }
+
+  .pool-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .pool-row label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .pool-row input { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 9px; font-size: 13px; font-family: 'JetBrains Mono', monospace; outline: none; width: 130px; }
+  .pool-row input:focus { border-color: var(--accent); }
+
+  .suggest-btn {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    padding: 9px 14px; border-radius: 7px; cursor: pointer; font-size: 13px; font-family: inherit;
+    text-align: center; transition: all .15s; margin-bottom: 12px; font-weight: 500;
+  }
+  .suggest-btn:hover { border-color: var(--accent); background: rgba(108,140,255,.08); }
+
+  .debt-btn {
+    width: 100%; padding: 9px 14px; border-radius: 7px; cursor: pointer;
+    font-size: 13px; font-family: inherit; font-weight: 600; text-align: center;
+    transition: all .15s; border: none; margin-top: 6px;
+  }
+  .debt-btn.active { background: var(--accent); color: #fff; }
+  .debt-btn.inactive { background: var(--surface2); border: 1px solid var(--border); color: var(--muted); cursor: not-allowed; }
+
+  .modal-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; gap: 8px; }
+  .apply-btn { background: var(--green); color: #0f1117; border: none; padding: 8px 18px; border-radius: 7px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
+  .apply-btn:hover { opacity: .88; }
+
+  .denom-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 3px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    transition: all .15s;
+  }
+  .denom-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .denom-btn.active { background: rgba(108,140,255,.15); border-color: var(--accent); color: var(--accent); }
+
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type=number] { -moz-appearance: textfield; }
+
+  /* PASSWORD SCREEN */
+  .pw-screen {
+    display: none; position: fixed; inset: 0;
+    background: var(--bg); z-index: 999;
+    align-items: center; justify-content: center;
+  }
+  .pw-screen.active { display: flex; }
+  .pw-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 36px 40px; width: 380px; max-width: 95vw;
+    text-align: center;
+  }
+  .pw-box h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+  .pw-box p  { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
+  .pw-input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); border-radius: 8px; padding: 10px 14px;
+    font-size: 15px; font-family: inherit; outline: none;
+    text-align: center; letter-spacing: 3px; margin-bottom: 12px;
+    transition: border-color .15s;
+  }
+  .pw-input:focus { border-color: var(--accent); }
+  .pw-error { color: var(--red); font-size: 12px; min-height: 18px; margin-bottom: 10px; }
+  .pw-btn {
+    width: 100%; background: var(--accent); color: #fff; border: none;
+    padding: 11px; border-radius: 8px; font-size: 14px; font-weight: 700;
+    cursor: pointer; font-family: inherit; transition: opacity .15s;
+  }
+  .pw-btn:hover { opacity: .85; }
+  .pw-change-link {
+    margin-top: 14px; font-size: 12px; color: var(--muted);
+    cursor: pointer; text-decoration: underline; display: inline-block;
+  }
+
+  @media (max-width: 900px) {
+    .cards { grid-template-columns: repeat(3, 1fr); }
+    .two-col { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 600px) {
+    .cards { grid-template-columns: 1fr 1fr; }
+    .inline-form { flex-direction: column; }
+    .field input[type=text] { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<!-- PASSWORD SCREEN -->
+<div class="pw-screen active" id="pw-screen">
+  <div class="pw-box">
+    <div style="font-size:36px;margin-bottom:12px">⚖️</div>
+    <h2 id="pw-title">Юр. Касса</h2>
+    <p id="pw-subtitle">Введите пароль для входа</p>
+    <input class="pw-input" type="password" id="pw-input"
+      placeholder="••••••" autocomplete="current-password"
+      onkeydown="if(event.key==='Enter')pwSubmit()">
+    <div class="pw-error" id="pw-error"></div>
+    <button class="pw-btn" onclick="pwSubmit()" id="pw-btn">Войти</button>
+    <div id="pw-change-wrap" style="display:none">
+      <span class="pw-change-link" onclick="pwChangeMode()">Изменить пароль</span>
+    </div>
+  </div>
+</div>
+
+<header>
+  <span>⚖️</span>
+  <h1>Юр. Касса</h1>
+  <span class="sync-dot loading" id="sync-dot" title="Подключение..."></span>
+  <nav class="tabs">
+    <button class="tab active" onclick="switchTab('main',this)">Учёт</button>
+    <button class="tab" onclick="switchTab('analytics',this)">Аналитика</button>
+  </nav>
+  <div class="header-actions">
+    <button class="btn ghost sm" id="undo-btn" onclick="undoAction()" style="display:none" title="Отменить последнее действие">↩</button>
+    <button class="btn ghost sm" onclick="exportData()">↓ JSON</button>
+    <button class="btn ghost sm" onclick="document.getElementById('import-file').click()">↑ Импорт</button>
+    <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)">
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- TAB: УЧЁТ -->
+  <div id="tab-main" class="tab-page">
+
+  <!-- SUMMARY CARDS -->
+  <div class="cards" id="summary-cards"></div>
+
+  <!-- DEBT BALANCE BLOCK -->
+  <div id="debt-balance-block" style="display:none;gap:10px;margin-bottom:14px;grid-template-columns:1fr 1fr" class="two-col">
+    <div class="ms" style="margin:0;cursor:pointer" id="debt-p1-block" onclick="toggleDebtDetails('p1')">
+      <div class="ms-block">
+        <div class="ms-row">
+          <span class="ml" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)" id="debt-p1-title">Руслан должен Ильнуру</span>
+          <span class="mv p1c mono" id="debt-p1-amount">0 ₽</span>
+        </div>
+      </div>
+      <div id="debt-p1-details" style="display:none;padding:0 14px 10px"></div>
+    </div>
+    <div class="ms" style="margin:0;cursor:pointer" id="debt-p2-block" onclick="toggleDebtDetails('p2')">
+      <div class="ms-block">
+        <div class="ms-row">
+          <span class="ml" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)" id="debt-p2-title">Ильнур должен Руслану</span>
+          <span class="mv p2c mono" id="debt-p2-amount">0 ₽</span>
+        </div>
+      </div>
+      <div id="debt-p2-details" style="display:none;padding:0 14px 10px"></div>
+    </div>
+  </div>
+
+  <!-- JOURNAL -->
+  <div class="section">
+    <div class="journal-head">
+      <span class="journal-title">📋 Журнал операций</span>
+      <span class="badge" id="journal-count">0</span>
+    </div>
+    <div id="month-tabs" style="display:flex;gap:6px;padding:0 18px 12px;flex-wrap:wrap;border-bottom:1px solid var(--border);margin-bottom:4px"></div>
+    <table>
+      <thead><tr>
+        <th>Дата</th><th>Тип</th><th>Сумма</th><th>Описание</th><th>Детали</th><th></th>
+      </tr></thead>
+      <tbody id="journal-tbody"></tbody>
+    </table>
+    <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">
+      <button class="btn green-btn sm" onclick="openDistModal()">⚡ Распределить</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head" style="color:var(--green)">💰 Добавить доход</div>
+    <div class="inline-form">
+      <div class="field"><label>Дата</label><input type="date" id="inc-date"></div>
+      <div class="field"><label>Сумма ₽</label><input type="number" id="inc-amount" placeholder="0" min="0"></div>
+      <div class="field"><label>Описание / клиент</label><input type="text" id="inc-desc" placeholder=""></div>
+      <div class="field">
+        <label>Форма</label>
+        <select id="inc-form">
+          <option value="cash">Наличка</option>
+          <option value="ruslan">На счёт Руслану</option>
+        </select>
+      </div>
+      <button class="btn" onclick="addIncome()">+ Добавить</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head" style="color:var(--red)">📤 Добавить расход</div>
+    <div class="inline-form">
+      <div class="field"><label>Дата</label><input type="date" id="exp-date"></div>
+      <div class="field"><label>Сумма ₽</label><input type="number" id="exp-amount" placeholder="0" min="0"></div>
+      <div class="field"><label>Описание</label><input type="text" id="exp-desc" placeholder=""></div>
+      <div class="field">
+        <label>Кто платил</label>
+        <select id="exp-who">
+          <option value="pool">Из общака</option>
+          <option value="p1" id="exp-who-p1">Партнёр 1</option>
+          <option value="p2" id="exp-who-p2">Партнёр 2</option>
+        </select>
+      </div>
+      <button class="btn" onclick="addExpense()">+ Добавить</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head" style="color:var(--yellow)">⟳ Добавить долг вручную</div>
+    <div class="inline-form">
+      <div class="field"><label>Дата</label><input type="date" id="debt-date"></div>
+      <div class="field"><label>Сумма ₽</label><input type="number" id="debt-amount" placeholder="0" min="0"></div>
+      <div class="field"><label>Описание</label><input type="text" id="debt-desc" placeholder="Займ, договорённость..."></div>
+      <div class="field">
+        <label>Кто должен</label>
+        <select id="debt-debtor">
+          <option value="p1" id="debt-debtor-p1">Руслан</option>
+          <option value="p2" id="debt-debtor-p2">Ильнур</option>
+        </select>
+      </div>
+      <button class="btn" onclick="addManualDebt()">+ Добавить</button>
+    </div>
+  </div>
+
+  <div class="settings-row">
+    <div class="field"><label>Имя партнёра 1</label><input type="text" id="name-p1" placeholder="Иванов"></div>
+    <div class="field"><label>Имя партнёра 2</label><input type="text" id="name-p2" placeholder="Петров"></div>
+    <button class="btn ghost" onclick="saveSettings()">Сохранить имена</button>
+    <div class="divider"></div>
+    <button class="btn ghost" style="color:var(--red);border-color:var(--red)" onclick="if(confirm('Удалить ВСЕ данные?'))clearAll()">🗑 Очистить всё</button>
+    <button class="btn ghost" id="pw-settings-link" style="display:none" onclick="pwChangeMode()">🔑 Изменить пароль</button>
+  </div>
+
+  </div><!-- /tab-main -->
+
+  <!-- TAB: АНАЛИТИКА -->
+  <div id="tab-analytics" class="tab-page" style="display:none">
+    <!-- ОБЩИЕ ПЛАШКИ -->
+    <div class="cards" id="analytics-cards"></div>
+
+    <!-- ДИАГРАММА -->
+    <div class="ms" style="margin-top:14px">
+      <div class="ms-title">📊 Доходы и расходы по месяцам</div>
+      <div id="analytics-chart" style="padding:16px 8px"></div>
+    </div>
+
+    <!-- ЧИСТЫЙ ДОХОД НА КАЖДОГО -->
+    <div class="ms" style="margin-top:14px">
+      <div class="ms-title">💵 Чистый доход на каждого</div>
+      <div id="analytics-net-chart" style="padding:16px 8px"></div>
+    </div>
+  </div>
+
+</div>
+
+
+<!-- PARTIAL PAYMENT MODAL -->
+<div class="modal-overlay" id="pay-modal" style="display:none;align-items:center;justify-content:center">
+  <div class="modal" style="width:380px">
+    <h2>💸 Погасить долг</h2>
+    <div class="ms" id="pay-modal-info"></div>
+    <div class="ms">
+      <div class="ms-block">
+        <div class="ms-row">
+          <span class="ml">Сумма погашения</span>
+          <span class="mv"><input type="number" id="pay-amount" placeholder="0" min="0"
+            style="width:120px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 8px;font-family:'JetBrains Mono',monospace;font-size:13px;text-align:right;outline:none"></span>
+        </div>
+        <div class="ms-row">
+          <span class="ml">Дата</span>
+          <span class="mv"><input type="date" id="pay-date"
+            style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 8px;font-family:inherit;font-size:13px;outline:none"></span>
+        </div>
+        <div class="ms-row" id="pay-full-row" style="cursor:pointer" onclick="setFullPayment()">
+          <span class="ml" style="color:var(--accent);font-size:12px">Погасить полностью</span>
+          <span class="mv" style="color:var(--accent);font-size:12px" id="pay-full-amount"></span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn ghost" onclick="closePayModal()">Отмена</button>
+      <button class="apply-btn" onclick="confirmPayment()">✓ Применить</button>
+    </div>
+  </div>
+</div>
+
+<!-- DISTRIBUTION MODAL -->
+<div class="modal-overlay" id="dist-modal">
+
+  <!-- MODAL 1: основное распределение -->
+  <div class="modal" id="modal1">
+    <h2>⚡ Распределить</h2>
+
+    <!-- Распределение доходов с inline полем общака -->
+    <div class="ms">
+      <div class="ms-title">Распределение доходов</div>
+      <div class="ms-block" id="dist-shares">
+        <div class="ms-row">
+          <span class="ml">В общак</span>
+          <span class="mv"><input type="number" id="pool-input" placeholder="0" min="0"
+            style="width:110px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 8px;font-family:'JetBrains Mono',monospace;font-size:13px;text-align:right;outline:none"
+            oninput="suggestDistribution()"></span>
+        </div>
+        <div style="display:flex;gap:6px;padding:6px 0 2px;flex-wrap:wrap">
+          <button class="denom-btn" id="denom-0"   onclick="setDenom(0)"    title="Без ограничений">Любая</button>
+          <button class="denom-btn" id="denom-500"  onclick="setDenom(500)"  >×500</button>
+          <button class="denom-btn" id="denom-1000" onclick="setDenom(1000)" >×1000</button>
+          <button class="denom-btn" id="denom-2000" onclick="setDenom(2000)" >×2000</button>
+          <button class="denom-btn" id="denom-5000" onclick="setDenom(5000)" >×5000</button>
+        </div>
+        <div id="pool-hint" style="display:none;padding:6px 0 2px">
+          <button onclick="applyPoolHint()" style="background:rgba(108,140,255,.12);border:1px solid rgba(108,140,255,.35);color:var(--accent);font-size:12px;padding:5px 12px;border-radius:6px;cursor:pointer;font-family:inherit;width:100%;text-align:left;transition:all .15s" id="pool-hint-btn"></button>
+        </div>
+        <div id="dist-shares-rows"></div>
+      </div>
+    </div>
+
+    <!-- Зачёт расходов -->
+    <div class="ms" id="dist-debts-wrap" style="display:none">
+      <div class="ms-title">Зачёт расходов из личных денег</div>
+      <div class="ms-block" id="dist-debts"></div>
+    </div>
+
+    <!-- Учёт долгов -->
+    <div class="ms" id="dist-accdebt-wrap" style="display:none">
+      <div class="ms-title" style="display:flex;align-items:center;justify-content:space-between">
+        <span>Учёт долгов</span>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);cursor:pointer;font-weight:400">
+          <input type="checkbox" id="include-manual-debts" checked onchange="suggestDistribution()"
+            style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">
+          учитывать ручные долги
+        </label>
+      </div>
+      <div class="ms-block" id="dist-accdebt"></div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn ghost" onclick="closeDistModal()">Отмена</button>
+    </div>
+  </div>
+
+  <!-- MODAL 2: экран проверки -->
+  <div class="modal" id="modal2" style="display:none">
+    <h2>📋 Итог распределения</h2>
+
+    <div class="ms">
+      <div class="ms-title">Касса</div>
+      <div class="ms-block" id="review-cash"></div>
+    </div>
+
+    <div class="ms">
+      <div class="ms-title">Выплаты</div>
+      <div class="ms-block" id="review-payouts"></div>
+    </div>
+
+    <div class="ms" id="review-debts-wrap" style="display:none">
+      <div class="ms-title">Остатки долгов</div>
+      <div class="ms-block" id="review-debts"></div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn ghost" onclick="closeReviewModal()">← Назад</button>
+      <button class="apply-btn" onclick="applyFromModal1()">✓ Применить</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ═══ PASSWORD ═══
+let _authenticated = false;
+let _pwMode = 'login'; // 'login' | 'setup' | 'change'
+
+// ═══ SESSION TIMEOUT ═══
+const SESSION_TIMEOUT = 5 * 60 * 1000; // 5 минут
+let _sessionTimer = null;
+
+function resetSessionTimer() {
+  if (!_authenticated) return;
+  clearTimeout(_sessionTimer);
+  _sessionTimer = setTimeout(() => {
+    _authenticated = false;
+    pwShowLogin();
+    document.getElementById('pw-screen').classList.add('active');
+    const el = document.getElementById('pw-settings-link');
+    if (el) el.style.display = 'none';
+  }, SESSION_TIMEOUT);
+}
+
+// Сбрасываем таймер при любом действии пользователя
+['mousemove','mousedown','keydown','touchstart','scroll','click'].forEach(evt => {
+  document.addEventListener(evt, resetSessionTimer, { passive: true });
+});
+
+async function pwHash(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+async function pwSubmit() {
+  const val = document.getElementById('pw-input').value.trim();
+  if (!val) return;
+  document.getElementById('pw-error').textContent = '';
+
+  if (_pwMode === 'setup') {
+    const hash = await pwHash(val);
+    localStorage.setItem('kassa_pw', hash);
+    try { await db.ref('pw').set(hash); } catch(e) {}
+    pwUnlock();
+    renderAll();
+  } else if (_pwMode === 'change') {
+    // Меняем пароль: сначала проверяем старый
+    const hash = await pwHash(val);
+    const snap = await db.ref('pw').once('value');
+    const stored = snap.val();
+    if (hash === stored) {
+      // Показываем поле для нового пароля
+      _pwMode = 'change2';
+      document.getElementById('pw-title').textContent = 'Новый пароль';
+      document.getElementById('pw-subtitle').textContent = 'Введите новый пароль';
+      document.getElementById('pw-btn').textContent = 'Сохранить';
+      document.getElementById('pw-input').value = '';
+    } else {
+      document.getElementById('pw-error').textContent = 'Неверный пароль';
+    }
+  } else if (_pwMode === 'change2') {
+    const hash = await pwHash(val);
+    await db.ref('pw').set(hash);
+    localStorage.setItem('kassa_pw', hash);
+    pwUnlock();
+  } else {
+    // Обычный вход
+    const hash = await pwHash(val);
+    // Сначала проверяем кэш
+    const cached = localStorage.getItem('kassa_pw');
+    if (cached && hash === cached) { pwUnlock(); return; }
+    // Проверяем Firebase
+    try {
+      const snap = await db.ref('pw').once('value');
+      const stored = snap.val();
+      if (hash === stored) {
+        localStorage.setItem('kassa_pw', hash);
+        pwUnlock();
+      } else {
+        document.getElementById('pw-error').textContent = 'Неверный пароль';
+        document.getElementById('pw-input').value = '';
+      }
+    } catch(e) {
+      if (cached && hash === cached) { pwUnlock(); return; }
+      document.getElementById('pw-error').textContent = 'Нет соединения с сервером';
+    }
+  }
+}
+
+function pwUnlock() {
+  _authenticated = true;
+  document.getElementById('pw-screen').classList.remove('active');
+  document.getElementById('pw-input').value = '';
+  const el = document.getElementById('pw-settings-link');
+  if (el) el.style.display = 'inline-block';
+  resetSessionTimer();
+  renderAll();
+}
+
+function pwChangeMode() {
+  _pwMode = 'change';
+  document.getElementById('pw-title').textContent = 'Смена пароля';
+  document.getElementById('pw-subtitle').textContent = 'Введите текущий пароль';
+  document.getElementById('pw-btn').textContent = 'Продолжить';
+  document.getElementById('pw-input').value = '';
+  document.getElementById('pw-error').textContent = '';
+  document.getElementById('pw-screen').classList.add('active');
+}
+
+function pwShowSetup() {
+  _pwMode = 'setup';
+  document.getElementById('pw-title').textContent = 'Установите пароль';
+  document.getElementById('pw-subtitle').textContent = 'Придумайте пароль для входа — он сохранится в базе';
+  document.getElementById('pw-btn').textContent = 'Установить пароль';
+  document.getElementById('pw-error').textContent = '';
+  document.getElementById('pw-input').value = '';
+  document.getElementById('pw-input').focus();
+}
+
+function pwShowLogin() {
+  _pwMode = 'login';
+  document.getElementById('pw-title').textContent = 'Юр. Касса';
+  document.getElementById('pw-subtitle').textContent = 'Введите пароль для входа';
+  document.getElementById('pw-btn').textContent = 'Войти';
+  document.getElementById('pw-error').textContent = '';
+  document.getElementById('pw-input').focus();
+}
+
+// Проверяем при старте — если Firebase недоступен и пароль в кэше нет, показываем экран
+function pwInit() {
+  document.getElementById('pw-change-wrap').style.display = 'block';
+
+  // Если есть кэшированный хэш — сразу показываем логин
+  const cached = localStorage.getItem('kassa_pw');
+  if (cached) {
+    pwShowLogin();
+    return;
+  }
+
+  // Таймаут: если Firebase не ответил за 2 сек — показываем setup
+  const fbPwTimeout = setTimeout(() => {
+    pwShowSetup();
+  }, 2000);
+
+  db.ref('pw').once('value').then(snap => {
+    clearTimeout(fbPwTimeout);
+    if (!snap.val()) {
+      pwShowSetup();
+    } else {
+      pwShowLogin();
+    }
+  }).catch(() => {
+    clearTimeout(fbPwTimeout);
+    pwShowSetup();
+  });
+
+  document.getElementById('pw-input').focus();
+}
+
+// ═══ FIREBASE ═══
+const firebaseConfig = {
+  apiKey: "AIzaSyDrlWBO9D3Soy4vo1sVQT6MFI8gJ19EgmY",
+  authDomain: "kassa-9191.firebaseapp.com",
+  databaseURL: "https://kassa-9191-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "kassa-9191",
+  storageBucket: "kassa-9191.firebasestorage.app",
+  messagingSenderId: "550138612133",
+  appId: "1:550138612133:web:a81358dcdc5eb109c6004c"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+function setSyncDot(s) {
+  const el = document.getElementById('sync-dot');
+  if (!el) return;
+  el.className = 'sync-dot ' + s;
+  el.title = s === 'ok' ? 'Синхронизировано' : s === 'loading' ? 'Сохранение...' : 'Ошибка синхронизации';
+}
+
+// ═══ STATE ═══
+let state = {
+  p1: 'Руслан', p2: 'Ильнур',
+  income: [], expenses: [],
+  distributions: [],
+  manualDebts: []
+};
+
+let _useFirebase = true;
+
+function load() {
+  state.p1 = state.p1 || 'Руслан';
+  state.p2 = state.p2 || 'Ильнур';
+  state.income = state.income || [];
+  state.expenses = state.expenses || [];
+  state.distributions = state.distributions || [];
+  state.manualDebts = state.manualDebts || [];
+}
+
+const _history = [];
+const _HISTORY_MAX = 10;
+
+function pushHistory() {
+  _history.push(JSON.stringify(state));
+  if (_history.length > _HISTORY_MAX) _history.shift();
+  const btn = document.getElementById('undo-btn');
+  if (btn) btn.style.display = 'inline-block';
+}
+
+function undoAction() {
+  if (_history.length === 0) return;
+  const prev = JSON.parse(_history.pop());
+  state = prev;
+  state.income        = toArray(state.income);
+  state.expenses      = toArray(state.expenses);
+  state.distributions = toArray(state.distributions);
+  state.distributions.forEach(d => {
+    d.incomeIds  = toArray(d.incomeIds);
+    d.expenseIds = toArray(d.expenseIds);
+  });
+  state.manualDebts = toArray(state.manualDebts);
+  save();
+  renderAll();
+  const btn = document.getElementById('undo-btn');
+  if (btn) btn.style.display = _history.length > 0 ? 'inline-block' : 'none';
+}
+
+function save() {
+  pushHistory();
+  if (_useFirebase) {
+    setSyncDot('loading');
+    db.ref('kassa').set(state)
+      .then(() => { setSyncDot('ok'); localStorage.setItem('legalcassa_backup', JSON.stringify(state)); })
+      .catch(() => { setSyncDot('err'); localStorage.setItem('legalcassa_backup', JSON.stringify(state)); });
+  } else {
+    localStorage.setItem('legalcassa_backup', JSON.stringify(state));
+    setSyncDot('ok');
+  }
+}
+function today() { return new Date().toISOString().slice(0,10); }
+function fmt(n) {
+  if (!n && n !== 0) return '0 ₽';
+  return (n < 0 ? '−' : '') + Math.abs(n).toLocaleString('ru-RU') + ' ₽';
+}
+// Для графиков: значение в тысячах, округлено до 1 знака после запятой
+function fmtChart(n) {
+  if (!n && n !== 0) return '0k';
+  const k = Math.round(Math.abs(n) / 100) / 10; // округление до 0.1k
+  const str = k % 1 === 0 ? k.toString() : k.toFixed(1);
+  return (n < 0 ? '−' : '') + str + 'k';
+}
+function fmtDateRu(dstr) {
+  if (!dstr) return '';
+  if (dstr.includes('-')) {
+    const parts = dstr.split('-');
+    if (parts.length === 3) return parts[2]+'.'+parts[1]+'.'+parts[0];
+  }
+  return dstr;
+}
+function nameOf(who) {
+  if (who === 'p1') return state.p1;
+  if (who === 'p2') return state.p2;
+  return 'Общак';
+}
+// Простое склонение имени в дательный падеж: добавляем "у" (или "ю" после гласной/мягкого знака)
+function toDative(name) {
+  if (!name) return name;
+  const last = name.slice(-1).toLowerCase();
+  const vowels = 'аеёиоуыэюя';
+  if (vowels.includes(last)) {
+    // имя уже оканчивается на гласную — меняем последнюю букву на "е" обычно не подходит,
+    // для простоты просто добавляем "" если оканчивается на гласную (Илья -> Илье — слишком сложно)
+    return name + (last === 'а' || last === 'я' ? '' : '');
+  }
+  if (last === 'й') return name.slice(0, -1) + 'ю';
+  if (last === 'ь') return name.slice(0, -1) + 'ю';
+  return name + 'у';
+}
+
+// ═══ TAB ═══
+// ═══ ANALYTICS ═══
+function renderAnalytics() {
+  const s = calc();
+  renderCards(s);
+
+  // Группируем доходы и расходы по месяцам (по дате записи)
+  const monthData = {}; // 'YYYY-MM' -> { inc, exp }
+  for (const i of state.income) {
+    const mk = monthKey(i.date);
+    if (!monthData[mk]) monthData[mk] = { inc: 0, exp: 0 };
+    monthData[mk].inc += i.amount;
+  }
+  for (const e of state.expenses) {
+    const mk = monthKey(e.date);
+    if (!monthData[mk]) monthData[mk] = { inc: 0, exp: 0 };
+    monthData[mk].exp += e.amount;
+  }
+
+  const keys = Object.keys(monthData).sort();
+  const chartEl = document.getElementById('analytics-chart');
+  if (!chartEl) return;
+
+  if (keys.length === 0) {
+    chartEl.innerHTML = '<div style="text-align:center;color:var(--muted);padding:30px 0">Пока нет данных для отображения</div>';
+    return;
+  }
+
+  const maxVal = Math.max(...keys.map(k => monthData[k].inc), 1);
+  const barW = 56, gap = 36, chartH = 220, leftPad = 16, topPad = 24;
+  const chartW = keys.length * (barW + gap) + leftPad*2;
+
+  let svg = '<svg viewBox="0 0 '+chartW+' '+(chartH+topPad+40)+'" style="width:100%;max-width:'+chartW+'px;height:auto" xmlns="http://www.w3.org/2000/svg">';
+  svg += '<defs><pattern id="expHatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">'+
+    '<rect width="6" height="6" fill="#f87171" fill-opacity=".25"/>'+
+    '<line x1="0" y1="0" x2="0" y2="6" stroke="#f87171" stroke-width="2"/>'+
+    '</pattern></defs>';
+
+  keys.forEach((mk, idx) => {
+    const d = monthData[mk];
+    const x = leftPad + idx * (barW + gap);
+    const incH = (d.inc / maxVal) * chartH;
+    const expH = Math.min(incH, (d.exp / maxVal) * chartH);
+    const incY = topPad + chartH - incH;
+    const [y, m] = mk.split('-');
+    const label = MONTH_NAMES_RU[parseInt(m,10)-1].slice(0,3) + ' ' + y.slice(2);
+
+    // Income bar (base)
+    svg += '<rect x="'+x+'" y="'+incY+'" width="'+barW+'" height="'+incH+'" rx="4" fill="#34d399"><title>Доход: '+fmt(d.inc)+'</title></rect>';
+
+    // Expense overlay (diagonal hatch), anchored to bottom of income bar
+    if (d.exp > 0) {
+      const expY = topPad + chartH - expH;
+      svg += '<rect x="'+x+'" y="'+expY+'" width="'+barW+'" height="'+expH+'" rx="4" fill="url(#expHatch)" stroke="#f87171" stroke-width="1.5"><title>Расход: '+fmt(d.exp)+'</title></rect>';
+    }
+
+    // Income value — above bar in black on light bg... per spec inside bar, black
+    if (d.inc > 0) {
+      svg += '<text x="'+(x+barW/2)+'" y="'+(incY+16)+'" text-anchor="middle" font-size="13" font-weight="900" fill="#0a0e1a" font-family="JetBrains Mono,monospace">'+fmtChart(d.inc)+'</text>';
+    }
+    // Expense value inside hatched zone, near top of expense zone (like income)
+    if (d.exp > 0) {
+      const expY = topPad + chartH - expH;
+      svg += '<text x="'+(x+barW/2)+'" y="'+(expY+16)+'" text-anchor="middle" font-size="11" font-weight="900" fill="#0a0e1a" font-family="JetBrains Mono,monospace">'+fmtChart(d.exp)+'</text>';
+    }
+
+    // Month label
+    svg += '<text x="'+(x+barW/2)+'" y="'+(topPad+chartH+22)+'" text-anchor="middle" font-size="11" fill="#9aa3b5" font-family="Inter,sans-serif">'+label+'</text>';
+  });
+
+  svg += '</svg>';
+
+  // Легенда
+  svg = '<div style="display:flex;gap:16px;justify-content:center;margin-bottom:10px;font-size:11px;color:var(--muted)">'+
+    '<span><span style="display:inline-block;width:10px;height:10px;background:#34d399;border-radius:2px;margin-right:5px"></span>Доходы</span>'+
+    '<span><span style="display:inline-block;width:10px;height:10px;background:repeating-linear-gradient(45deg,#f87171,#f87171 2px,transparent 2px,transparent 5px);border:1px solid #f87171;border-radius:2px;margin-right:5px"></span>Расходы (доля от дохода)</span>'+
+    '</div>' + '<div style="overflow-x:auto">'+svg+'</div>';
+
+  chartEl.innerHTML = svg;
+
+  // ═══ Чистый доход на каждого ═══
+  const netEl = document.getElementById('analytics-net-chart');
+  if (netEl) {
+    const maxNet = Math.max(...keys.map(k => Math.abs((monthData[k].inc - monthData[k].exp) / 2)), 1);
+    const nBarW = 56, nGap = 36, nChartH = 140, nLeftPad = 16, nTopPad = 20;
+    const nChartW = keys.length * (nBarW + nGap) + nLeftPad*2;
+    const zeroY = nTopPad + nChartH/2;
+
+    let nsvg = '<svg viewBox="0 0 '+nChartW+' '+(nChartH+nTopPad+40)+'" style="width:100%;max-width:'+nChartW+'px;height:auto" xmlns="http://www.w3.org/2000/svg">';
+    nsvg += '<line x1="'+nLeftPad/2+'" y1="'+zeroY+'" x2="'+(nChartW-nLeftPad/2)+'" y2="'+zeroY+'" stroke="#2a3142" stroke-width="1"/>';
+
+    keys.forEach((mk, idx) => {
+      const d = monthData[mk];
+      const net = (d.inc - d.exp) / 2;
+      const x = nLeftPad + idx * (nBarW + nGap);
+      const h = (Math.abs(net) / maxNet) * (nChartH/2);
+      const color = net >= 0 ? '#34d399' : '#f87171';
+      const barY = net >= 0 ? zeroY - h : zeroY;
+      const [y, m] = mk.split('-');
+      const label = MONTH_NAMES_RU[parseInt(m,10)-1].slice(0,3) + ' ' + y.slice(2);
+
+      nsvg += '<rect x="'+x+'" y="'+barY+'" width="'+nBarW+'" height="'+h+'" rx="4" fill="'+color+'"><title>Чистый доход на каждого: '+fmt(net)+'</title></rect>';
+      const textY = net >= 0 ? (barY + 16) : (barY + h - 8);
+      nsvg += '<text x="'+(x+nBarW/2)+'" y="'+textY+'" text-anchor="middle" font-size="11" font-weight="900" fill="#0a0e1a" font-family="JetBrains Mono,monospace">'+fmtChart(net)+'</text>';
+      nsvg += '<text x="'+(x+nBarW/2)+'" y="'+(nTopPad+nChartH+22)+'" text-anchor="middle" font-size="11" fill="#9aa3b5" font-family="Inter,sans-serif">'+label+'</text>';
+    });
+
+    nsvg += '</svg>';
+    netEl.innerHTML = '<div style="overflow-x:auto">'+nsvg+'</div>';
+  }
+}
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-page').forEach(p => p.style.display = 'none');
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).style.display = 'block';
+  btn.classList.add('active');
+  if (name === 'analytics') renderAnalytics();
+}
+
+// ═══ GROUP COLLAPSE ═══
+const _openGroups = new Set(); // ids of expanded groups
+
+function toggleGroup(distId) {
+  if (_openGroups.has(distId)) {
+    _openGroups.delete(distId);
+  } else {
+    _openGroups.add(distId);
+  }
+  renderJournal();
+}
+
+// ═══ CALC ═══
+function calc() {
+  const inc = state.income;
+  const exp = state.expenses;
+
+  // ids already in distributions (they're "locked")
+  const distIncIds = new Set(state.distributions.flatMap(d => d.incomeIds));
+  const distExpIds = new Set(state.distributions.flatMap(d => d.expenseIds));
+
+  const freeInc  = inc.filter(i => !distIncIds.has(i.id));
+  const freeExp  = exp.filter(e => !distExpIds.has(e.id));
+
+  const totalInc   = inc.reduce((s,i)=>s+i.amount,0);
+  const splitInc   = inc.filter(i=>i.status==='split').reduce((s,i)=>s+i.amount,0);
+  const pooledInc  = inc.filter(i=>i.status==='pooled').reduce((s,i)=>s+i.amount,0);
+  const pooledFromDist = state.distributions.reduce((s,d) => s + (d.result.poolAmt || 0), 0);
+  const unsplitInc = freeInc.filter(i=>i.status==='unsplit').reduce((s,i)=>s+i.amount,0);
+  const totalExp   = exp.reduce((s,e)=>s+e.amount,0);
+  const poolExp    = exp.filter(e=>e.who==='pool').reduce((s,e)=>s+e.amount,0);
+  const p1Exp      = exp.filter(e=>e.who==='p1').reduce((s,e)=>s+e.amount,0);
+  const p2Exp      = exp.filter(e=>e.who==='p2').reduce((s,e)=>s+e.amount,0);
+  const p1Common   = exp.filter(e=>e.who==='p1'&&e.purpose==='common').reduce((s,e)=>s+e.amount,0);
+  const p2Common   = exp.filter(e=>e.who==='p2'&&e.purpose==='common').reduce((s,e)=>s+e.amount,0);
+  const poolBalance= pooledInc + pooledFromDist - poolExp;
+  const eachSplit  = splitInc / 2;
+  const commonDiff = p1Common - p2Common;
+
+  // free personal expenses
+  const freeP1Exp = freeExp.filter(e=>e.who==='p1').reduce((s,e)=>s+e.amount,0);
+  const freeP2Exp = freeExp.filter(e=>e.who==='p2').reduce((s,e)=>s+e.amount,0);
+
+  return {
+    totalInc, splitInc, pooledInc, unsplitInc, totalExp, poolExp,
+    p1Exp, p2Exp, p1Common, p2Common, poolBalance, eachSplit, commonDiff,
+    freeP1Exp, freeP2Exp, freeInc, freeExp
+  };
+}
+
+// ═══ DISTRIBUTION LOGIC ═══
+
+// текущий черновик распределения (заполняется suggestDistribution)
+let _draft = null;
+let _denom = 1000; // 0 = любая, иначе номинал купюр
+
+function applyPoolHint() {
+  if (!_draft) return;
+  document.getElementById('pool-input').value = _draft.totalPoolAmt;
+  suggestDistribution();
+}
+
+function setDenom(d) {
+  _denom = d;
+  document.querySelectorAll('.denom-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('denom-' + d);
+  if (btn) btn.classList.add('active');
+  suggestDistribution();
+}
+
+function getFreeSums() {
+  const s = calc();
+  let unsplitItems = s.freeInc.filter(i => i.status === 'unsplit');
+  let personalExpItems = s.freeExp.filter(e => e.who === 'p1' || e.who === 'p2');
+
+  // В режиме перераспределения — только записи из старого распределения
+  if (_redistIncIds && _redistIncIds.size > 0) {
+    unsplitItems = unsplitItems.filter(i => _redistIncIds.has(i.id));
+  }
+  if (_redistExpIds && _redistExpIds.size > 0) {
+    personalExpItems = personalExpItems.filter(e => _redistExpIds.has(e.id));
+  }
+
+  const totalUnsplit = unsplitItems.reduce((a,i)=>a+i.amount,0);
+  const ruslanAcctTotal = unsplitItems.filter(i=>i.form==='ruslan').reduce((a,i)=>a+i.amount,0);
+  const cashTotal = totalUnsplit - ruslanAcctTotal;
+  const p1Exp = personalExpItems.filter(e=>e.who==='p1').reduce((a,e)=>a+e.amount,0);
+  const p2Exp = personalExpItems.filter(e=>e.who==='p2').reduce((a,e)=>a+e.amount,0);
+  const totalExp = p1Exp + p2Exp;
+  return { s, unsplitItems, personalExpItems, totalUnsplit, ruslanAcctTotal, cashTotal, p1Exp, p2Exp, totalExp };
+}
+
+function onPoolInput() { suggestDistribution(); }
+
+function settleAccountDebt(distId) {
+  const dist = state.distributions.find(d => d.id === distId);
+  if (!dist) return;
+  dist.result.accountDebtSettled = true;
+  save();
+  renderAll();
+}
+
+function unsettleAccountDebt(distId) {
+  const dist = state.distributions.find(d => d.id === distId);
+  if (!dist) return;
+  dist.result.accountDebtSettled = false;
+  save();
+  renderAll();
+}
+
+// Возвращает накопленный долг из всех прошлых распределений
+// в виде числа: >0 → p1 должен p2, <0 → p2 должен p1
+let _debtDetailsOpen = { p1: false, p2: false };
+
+function toggleDebtDetails(who) {
+  _debtDetailsOpen[who] = !_debtDetailsOpen[who];
+  document.getElementById('debt-'+who+'-details').style.display = _debtDetailsOpen[who] ? 'block' : 'none';
+}
+
+function deleteDebtSource(type, id) {
+  if (!confirm('Удалить эту запись долга? Действие нельзя отменить.')) return;
+  if (type === 'dist') {
+    const dist = state.distributions.find(d => d.id === id);
+    if (dist) {
+      dist.result.debtTail = null;
+      dist.result.debtorName = null;
+      dist.result.creditorName = null;
+      dist.result.payments = [];
+    }
+  } else if (type === 'acct') {
+    const dist = state.distributions.find(d => d.id === id);
+    if (dist) {
+      dist.result.accountDebt = 0;
+      dist.result.accountDebtSettled = true;
+      dist.result.acctPayments = [];
+    }
+  } else if (type === 'manual') {
+    state.manualDebts = (state.manualDebts||[]).filter(d => d.id !== id);
+  }
+  save();
+  renderAll();
+}
+
+function renderDebtBalance() {
+  const block = document.getElementById('debt-balance-block');
+  let p1owes = 0; // Руслан должен Ильнуру
+  let p2owes = 0; // Ильнур должен Руслану
+  const p1sources = [];
+  const p2sources = [];
+
+  for (const dist of state.distributions) {
+    const r = dist.result;
+    if (!r) continue;
+    const ts = new Date(dist.ts).toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'2-digit'});
+    if (r.debtTail && r.debtTail > 0 && r.debtorName) {
+      const paid = (r.payments||[]).reduce((s,p)=>s+p.amount,0);
+      const rem = Math.max(0, r.debtTail - paid);
+      if (rem > 0.01) {
+        const label = ts + ' · расходы';
+        const src = {label, amount: rem, type:'dist', id: dist.id};
+        if (r.debtorName === state.p1) { p1owes += rem; p1sources.push(src); }
+        else { p2owes += rem; p2sources.push(src); }
+      }
+    }
+    if (r.accountDebt && r.accountDebt > 0 && !r.accountDebtSettled) {
+      const paid = (r.acctPayments||[]).reduce((s,p)=>s+p.amount,0);
+      const rem = Math.max(0, r.accountDebt - paid);
+      if (rem > 0.01) {
+        p1owes += rem;
+        p1sources.push({label: ts + ' · со счёта', amount: rem, type:'acct', id: dist.id});
+      }
+    }
+  }
+  for (const d of (state.manualDebts||[])) {
+    const paid = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
+    const rem = Math.max(0, d.amount - paid);
+    if (rem > 0.01) {
+      const label = (d.date||'') + (d.desc ? ' · '+d.desc : ' · ручной долг');
+      const src = {label, amount: rem, type:'manual', id: d.id};
+      if (d.debtor === 'p1') { p1owes += rem; p1sources.push(src); }
+      else { p2owes += rem; p2sources.push(src); }
+    }
+  }
+
+  if (p1owes < 0.01 && p2owes < 0.01) { block.style.display = 'none'; return; }
+  block.style.display = 'grid';
+  document.getElementById('debt-p1-title').textContent = state.p1 + ' должен ' + toDative(state.p2);
+  document.getElementById('debt-p2-title').textContent = state.p2 + ' должен ' + toDative(state.p1);
+  document.getElementById('debt-p1-amount').textContent = p1owes > 0.01 ? fmt(p1owes) : '—';
+  document.getElementById('debt-p1-amount').style.color = p1owes > 0.01 ? 'var(--yellow)' : 'var(--muted)';
+  document.getElementById('debt-p2-amount').textContent = p2owes > 0.01 ? fmt(p2owes) : '—';
+  document.getElementById('debt-p2-amount').style.color = p2owes > 0.01 ? 'var(--yellow)' : 'var(--muted)';
+
+  function renderSources(sources) {
+    if (!sources.length) return '';
+    let html = '<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:2px">';
+    for (const s of sources) {
+      const delOnclick = "event.stopPropagation();deleteDebtSource('"+s.type+"',"+s.id+")";
+      const payOnclick = "event.stopPropagation();openPayModal('"+s.type+"',"+s.id+")";
+      const editBtn = s.type === 'manual'
+        ? '<button class="edit-btn" style="font-size:11px" onclick="event.stopPropagation();startEdit('+s.id+',\'manual-debt\')" title="Редактировать">✎</button>'
+        : '';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);padding:4px 0;gap:6px">'+
+        '<span style="flex:1">'+s.label+'</span>'+
+        '<span class="mono" style="color:var(--text)">'+fmt(s.amount)+'</span>'+
+        '<button class="save-btn" style="font-size:11px;white-space:nowrap" onclick="'+payOnclick+'">Погасить</button>'+
+        editBtn+
+        '<button class="del-btn" style="font-size:11px" onclick="'+delOnclick+'" title="Удалить">×</button>'+
+        '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  document.getElementById('debt-p1-details').innerHTML = renderSources(p1sources);
+  document.getElementById('debt-p2-details').innerHTML = renderSources(p2sources);
+  document.getElementById('debt-p1-details').style.display = _debtDetailsOpen.p1 ? 'block' : 'none';
+  document.getElementById('debt-p2-details').style.display = _debtDetailsOpen.p2 ? 'block' : 'none';
+}
+
+function getAccumulatedDebt(includeManual) {
+  let debt = 0;
+  for (const dist of state.distributions) {
+    const r = dist.result;
+    if (!r) continue;
+    if (r.debtTail && r.debtTail > 0.01 && r.debtorName) {
+      const paid = (r.payments||[]).reduce((s,p)=>s+p.amount,0);
+      const rem = Math.max(0, r.debtTail - paid);
+      if (rem > 0.01) { if (r.debtorName === state.p1) debt += rem; else debt -= rem; }
+    }
+    if (r.accountDebt && r.accountDebt > 0 && !r.accountDebtSettled) {
+      const acctPaid = (r.acctPayments||[]).reduce((s,p)=>s+p.amount,0);
+      debt += Math.max(0, r.accountDebt - acctPaid);
+    }
+  }
+  if (includeManual !== false) {
+    for (const d of (state.manualDebts||[])) {
+      const dpaid = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
+      const drem = Math.max(0, d.amount - dpaid);
+      if (drem > 0.01) { if (d.debtor === 'p1') debt += drem; else debt -= drem; }
+    }
+  }
+  return debt;
+}
+
+function suggestDistribution() {
+  const { totalUnsplit, ruslanAcctTotal, cashTotal, p1Exp, p2Exp } = getFreeSums();
+  const poolAmt = parseFloat(document.getElementById('pool-input').value) || 0;
+
+  // Шаг 1: считаем максимальные выплаты кратно номиналу
+  // Некратный остаток уходит в общак автоматически
+  const afterPool = totalUnsplit - poolAmt;
+  const eachShare = afterPool / 2;
+  const unit = _denom > 0 ? _denom : 1;
+  // Каждый получает кратно номиналу — остаток идёт в общак
+  const eachPayout = _denom > 0 ? Math.floor(eachShare / unit) * unit : eachShare;
+  const payoutRemainder = afterPool - eachPayout * 2; // некратный остаток → в общак
+  const totalPoolAmt = poolAmt + payoutRemainder;
+  const p1Income = eachPayout;
+  const p2Income = eachPayout;
+  const incTail  = payoutRemainder;
+
+  // Шаг 2: долг по текущим расходам
+  const expDiff = p1Exp - p2Exp;
+  const currentDebtRaw = Math.abs(expDiff) / 2;
+  const currentDebtorName   = expDiff > 0 ? state.p2 : (expDiff < 0 ? state.p1 : null);
+  const currentCreditorName = expDiff > 0 ? state.p1 : (expDiff < 0 ? state.p2 : null);
+
+  // Шаг 3: накопленный долг из прошлых распределений
+  const inclManualEl = document.getElementById('include-manual-debts');
+  const inclManual = inclManualEl ? inclManualEl.checked : true;
+  const accumulated = getAccumulatedDebt(inclManual);
+
+  // Шаг 4: суммируем долги с учётом направления
+  // >0 = p1 (Руслан) должен p2 (Ильнуру), <0 = Ильнур должен Руслану
+  const currentSigned = expDiff > 0 ? -currentDebtRaw : currentDebtRaw;
+  const totalDebtSigned = accumulated + currentSigned;
+  const totalDebtRaw = Math.abs(totalDebtSigned);
+  const debtorName   = totalDebtSigned > 0.01 ? state.p1 : totalDebtSigned < -0.01 ? state.p2 : null;
+  const creditorName = totalDebtSigned > 0.01 ? state.p2 : totalDebtSigned < -0.01 ? state.p1 : null;
+  const debtKrat     = Math.floor(totalDebtRaw / 1000) * 1000;
+
+  const acctUnit = 1000;
+  const poolFromCash = Math.min(totalPoolAmt, cashTotal);
+  const cashForPayouts = cashTotal - poolFromCash;
+
+  let ilnurFromCash, ilnurFromRuslanFinal, cashDebtToIlnur;
+  let ruslanFromCash = 0;        // Руслан забирает наличкой
+  let debtAutoApply = 0;         // долг учтённый в этом распределении
+  let debtTailAfterAuto = totalDebtRaw; // остаток долга
+
+  if (totalDebtSigned > 0.01 && debtKrat >= 1000) {
+    // ═══ Руслан должен Ильнуру ═══
+    // Предпочтительно из налички, остаток — со счёта
+
+    // Ильнур берёт наличкой кратно номиналу
+    const ilnurFromCashRaw = Math.min(p2Income, Math.max(0, cashForPayouts));
+    ilnurFromCash = _denom > 0 ? Math.floor(ilnurFromCashRaw / unit) * unit : ilnurFromCashRaw;
+    const cashRemainder = ilnurFromCashRaw - ilnurFromCash;
+
+    // Остаток доли Ильнура после налички
+    const ilnurStillNeeded = Math.max(0, p2Income - ilnurFromCash);
+
+    // Сколько налички осталось у Руслана (его доля из налички)
+    const ruslanCashAvail = Math.max(0, cashForPayouts - ilnurFromCashRaw);
+    // Руслан может погасить долг из своей наличной доли кратно 1000
+    const debtFromCash = Math.min(debtKrat, Math.floor(ruslanCashAvail / 1000) * 1000);
+    // Остаток долга — со счёта только если счёт есть
+    const debtFromAcct = ruslanAcctTotal > 0 ? debtKrat - debtFromCash : 0;
+    // Если счёта нет — применяем только то что покрывается наличкой
+    debtAutoApply = debtFromCash + debtFromAcct;
+    debtTailAfterAuto = totalDebtRaw - debtAutoApply;
+
+    // Руслан отдаёт Ильнуру: долг из налички + долг со счёта + недостающая доля со счёта
+    ruslanFromCash = Math.max(0, Math.floor((ruslanCashAvail - debtFromCash) / unit) * unit);
+    const ilnurFromRuslanRaw = ilnurStillNeeded + cashRemainder + debtFromAcct;
+    if (ruslanAcctTotal > 0) {
+      ilnurFromRuslanFinal = Math.floor(ilnurFromRuslanRaw / acctUnit) * acctUnit;
+      cashDebtToIlnur = Math.max(0, ilnurFromRuslanRaw - ilnurFromRuslanFinal);
+    } else {
+      ilnurFromRuslanFinal = 0;
+      cashDebtToIlnur = ilnurFromRuslanRaw;
+    }
+    ilnurFromCash = ilnurFromCash + debtFromCash;
+
+  } else if (totalDebtSigned < -0.01 && debtKrat >= 1000) {
+    // ═══ Ильнур должен Руслану ═══
+    const ilnurGrossRaw = Math.min(p2Income, Math.max(0, cashForPayouts));
+    const ilnurGross = _denom > 0 ? Math.floor(ilnurGrossRaw / unit) * unit : ilnurGrossRaw;
+    const ilnurPayback = Math.min(debtKrat, ilnurGross);
+    ilnurFromCash = Math.max(0, ilnurGross - ilnurPayback);
+    debtAutoApply = ilnurPayback;
+    debtTailAfterAuto = totalDebtRaw - ilnurPayback;
+    ruslanFromCash = Math.max(0, Math.floor((cashForPayouts - ilnurGrossRaw) / unit) * unit) + ilnurPayback;
+    const ilnurStillNeeded = Math.max(0, p2Income - ilnurGross);
+    if (ruslanAcctTotal > 0) {
+      ilnurFromRuslanFinal = _denom > 0 ? Math.floor(ilnurStillNeeded / acctUnit) * acctUnit : ilnurStillNeeded;
+      cashDebtToIlnur = Math.max(0, ilnurStillNeeded - ilnurFromRuslanFinal);
+    } else {
+      ilnurFromRuslanFinal = 0;
+      cashDebtToIlnur = ilnurStillNeeded;
+    }
+
+  } else {
+    // ═══ Нет долга или меньше 1000 ═══
+    const ilnurFromCashRaw = Math.min(p2Income, Math.max(0, cashForPayouts));
+    ilnurFromCash = _denom > 0 ? Math.floor(ilnurFromCashRaw / unit) * unit : ilnurFromCashRaw;
+    const cashRemainder = ilnurFromCashRaw - ilnurFromCash;
+    const ilnurStillNeeded = Math.max(0, p2Income - ilnurFromCash);
+    ruslanFromCash = Math.max(0, Math.floor((cashForPayouts - ilnurFromCashRaw) / unit) * unit);
+    const ilnurFromRuslanRaw = ilnurStillNeeded + cashRemainder;
+    if (ruslanAcctTotal > 0) {
+      ilnurFromRuslanFinal = _denom > 0 ? Math.floor(ilnurFromRuslanRaw / acctUnit) * acctUnit : ilnurFromRuslanRaw;
+      cashDebtToIlnur = Math.max(0, ilnurFromRuslanRaw - ilnurFromRuslanFinal);
+    } else {
+      ilnurFromRuslanFinal = 0;
+      cashDebtToIlnur = ilnurFromRuslanRaw;
+    }
+    debtTailAfterAuto = totalDebtRaw;
+  }
+
+  _draft = {
+    poolAmt, totalPoolAmt, afterPool, eachShare,
+    p1Income, p2Income, incTail,
+    p1Exp, p2Exp, expDiff,
+    currentDebtRaw, currentDebtorName, currentCreditorName,
+    accumulated,
+    debtRaw: totalDebtRaw, debtKrat, debtorName, creditorName,
+    totalDebtSigned,
+    debtAutoApply, debtTailAfterAuto,
+    ruslanAcctTotal, cashTotal,
+    ilnurFromCash, ruslanFromCash,
+    ilnurFromRuslan: ilnurFromRuslanFinal, cashDebtToIlnur
+  };
+
+  document.getElementById('pool-input').style.borderColor = incTail > 0 ? 'var(--yellow)' : '';
+  document.getElementById('pool-input').title = incTail > 0 ? `${fmt(poolAmt)} введено + ${fmt(incTail)} остаток = ${fmt(totalPoolAmt)}` : '';
+
+  document.getElementById('dist-shares-rows').innerHTML = `
+    <div class="ms-row">
+      <span class="ml">${state.p1}</span>
+      <span class="mv p1c">+${fmt(p1Income)}</span>
+    </div>
+    <div class="ms-row">
+      <span class="ml">${state.p2}</span>
+      <span class="mv p2c">+${fmt(p2Income)}</span>
+    </div>
+    ${incTail > 0 ? `<div class="ms-row">
+      <span class="ml" style="color:var(--yellow);font-size:12px">+ в общак (некратный остаток)</span>
+      <span class="mv yellow">${fmt(incTail)}</span>
+    </div>` : ''}
+    ${ruslanAcctTotal > 0 ? `
+    <div class="ms-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px">
+      <span class="ml" style="font-size:11px;color:var(--muted)">На счёте Руслана</span>
+      <span class="mv" style="color:var(--p2)">${fmt(ruslanAcctTotal)}</span>
+    </div>
+    <div class="ms-row">
+      <span class="ml" style="font-size:12px">${state.p1} забирает наличкой</span>
+      <span class="mv p1c">${fmt(ruslanFromCash)}</span>
+    </div>
+    <div class="ms-row">
+      <span class="ml" style="font-size:12px">${state.p2} забирает наличкой</span>
+      <span class="mv p2c">${fmt(ilnurFromCash)}</span>
+    </div>
+    ${ ilnurFromRuslanFinal > 0 ? '<div class="ms-row"><span class="ml" style="font-size:12px;color:var(--yellow)">'+state.p1+' должен '+toDative(state.p2)+' со счёта</span><span class="mv yellow">'+fmt(ilnurFromRuslanFinal)+'</span></div>' : ''}
+    ${ilnurFromRuslanFinal > 0 && debtAutoApply > 0 ? '<div class="ms-row"><span class="ml" style="font-size:11px;color:var(--muted);padding-left:10px">в т.ч. погашение долга</span><span class="mv" style="color:var(--muted);font-size:11px">'+fmt(debtAutoApply)+'</span></div>' : ''}
+    ${cashDebtToIlnur > 0 ? '<div class="ms-row"><span class="ml" style="font-size:12px;color:var(--red)">'+state.p1+' должен '+toDative(state.p2)+' (остаток, на следующий период)</span><span class="mv red">'+fmt(cashDebtToIlnur)+'</span></div>' : ''}
+    <div class="ms-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px">
+      <span class="ml" style="font-size:12px;color:var(--muted)">Итого в общак</span>
+      <span class="mv">${fmt(totalPoolAmt)}</span>
+    </div>
+    ` : ''}
+  `;
+  document.getElementById('dist-debts-wrap').style.display = 'block';
+
+  // Рендер "Зачёт расходов"
+  let debtsHtml = `
+    <div class="ms-row">
+      <span class="ml">${state.p1} потратил из своих</span>
+      <span class="mv red">${fmt(p1Exp)}</span>
+    </div>
+    <div class="ms-row">
+      <span class="ml">${state.p2} потратил из своих</span>
+      <span class="mv red">${fmt(p2Exp)}</span>
+    </div>
+    <div class="ms-row" style="border-top:1px solid var(--border);padding-top:6px;margin-top:6px;font-size:11px;color:var(--muted)">
+      <span>Каждый должен нести поровну: ${fmt((p1Exp + p2Exp) / 2)}</span>
+    </div>
+  `;
+
+  if (currentDebtorName) {
+    debtsHtml += `
+      <div class="ms-row" style="margin-top:2px">
+        <span class="ml">По текущим расходам: <b style="color:var(--text)">${currentDebtorName}</b> должен <b style="color:var(--text)">${toDative(currentCreditorName)}</b></span>
+        <span class="mv yellow">${fmt(currentDebtRaw)}</span>
+      </div>`;
+  } else {
+    debtsHtml += `<div class="ms-row"><span class="ml">Текущие расходы в паритете</span><span class="mv green">✓</span></div>`;
+  }
+
+  document.getElementById('dist-debts').innerHTML = debtsHtml;
+
+  // ═══ Блок "Учёт долгов" ═══
+  let accDebtHtml = '';
+
+  function fmtDate(dstr) {
+    if (!dstr) return '';
+    if (dstr.includes('-')) {
+      const parts = dstr.split('-');
+      if (parts.length === 3) return parts[2]+'.'+parts[1]+'.'+parts[0];
+    }
+    return dstr;
+  }
+
+  // Собираем источники долгов с обеих сторон
+  const p1Sources = []; // Руслан должен Ильнуру
+  const p2Sources = []; // Ильнур должен Руслану
+  for (const dist of state.distributions) {
+    const r = dist.result;
+    if (!r) continue;
+    const ts = fmtDate(dist.ts.slice(0,10));
+    if (r.debtTail && r.debtTail > 0.01 && r.debtorName) {
+      const paid = (r.payments||[]).reduce((s,p)=>s+p.amount,0);
+      const rem = Math.max(0, r.debtTail - paid);
+      if (rem > 0.01) {
+        const item = { label: 'долг от предыдущего распределения ('+ts+')', amount: rem };
+        if (r.debtorName === state.p1) p1Sources.push(item); else p2Sources.push(item);
+      }
+    }
+    if (r.accountDebt && r.accountDebt > 0 && !r.accountDebtSettled) {
+      const paid = (r.acctPayments||[]).reduce((s,p)=>s+p.amount,0);
+      const rem = Math.max(0, r.accountDebt - paid);
+      if (rem > 0.01) p1Sources.push({ label: 'долг со счёта ('+ts+')', amount: rem });
+    }
+  }
+  if (inclManual) {
+    for (const d of (state.manualDebts||[])) {
+      const paid = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
+      const rem = Math.max(0, d.amount - paid);
+      if (rem > 0.01) {
+        const item = { label: 'ручной долг от ('+fmtDate(d.date)+')'+(d.desc?' · '+d.desc:''), amount: rem };
+        if (d.debtor === 'p1') p1Sources.push(item); else p2Sources.push(item);
+      }
+    }
+  }
+  // Долг по текущим (ещё не распределённым) расходам этого периода
+  if (currentDebtorName) {
+    const item = { label: 'долг по текущим расходам', amount: currentDebtRaw };
+    if (currentDebtorName === state.p1) p1Sources.push(item); else p2Sources.push(item);
+  }
+
+  const p1Total = p1Sources.reduce((s,i)=>s+i.amount,0);
+  const p2Total = p2Sources.reduce((s,i)=>s+i.amount,0);
+
+  function renderSourceList(items) {
+    let h = '';
+    items.forEach((it, idx) => {
+      const prefix = idx === 0 ? 'в т.ч. ' : '';
+      h += '<div class="ms-row" style="padding:1px 0"><span class="ml" style="font-size:11px;color:var(--muted);padding-left:10px">'+prefix+it.label+'</span><span class="mv" style="font-size:11px;color:var(--muted)">'+fmt(it.amount)+'</span></div>';
+    });
+    return h;
+  }
+
+  if (p1Total < 0.01 && p2Total < 0.01) {
+    accDebtHtml += `<div class="ms-row"><span class="ml" style="font-size:12px;color:var(--muted)">Накопленных долгов нет</span></div>`;
+  } else {
+    // Больший долг — первая строка, жёлтым
+    const bigSide  = p1Total >= p2Total ? { name: state.p1, other: state.p2, total: p1Total, sources: p1Sources } : { name: state.p2, other: state.p1, total: p2Total, sources: p2Sources };
+    const offSide  = p1Total >= p2Total ? { name: state.p2, other: state.p1, total: p2Total, sources: p2Sources } : { name: state.p1, other: state.p2, total: p1Total, sources: p1Sources };
+
+    accDebtHtml += '<div class="ms-row"><span class="ml" style="font-weight:600"><b style="color:var(--text)">'+bigSide.name+'</b> должен <b style="color:var(--text)">'+toDative(bigSide.other)+'</b></span><span class="mv yellow">'+fmt(bigSide.total)+'</span></div>';
+    accDebtHtml += renderSourceList(bigSide.sources);
+
+    if (offSide.total > 0.01) {
+      accDebtHtml += '<div class="ms-row" style="margin-top:8px"><span class="ml" style="font-size:12px;color:var(--muted)">Долги подлежащие зачёту:</span></div>';
+      accDebtHtml += '<div class="ms-row"><span class="ml"><b style="color:var(--text)">'+offSide.name+'</b> должен <b style="color:var(--text)">'+toDative(offSide.other)+'</b></span><span class="mv red">'+fmt(offSide.total)+'</span></div>';
+      accDebtHtml += renderSourceList(offSide.sources);
+    }
+
+    // Учтено при распределении наличными/со счёта — перед "Итог"
+    if (debtAutoApply > 0) {
+      const accountLabel = ruslanAcctTotal > 0
+        ? '✓ Учтено при передаче со счёта'
+        : '✓ Учтено при распределении наличными';
+      accDebtHtml += `
+        <div class="ms-row" style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px">
+          <span class="ml" style="color:var(--green);font-size:12px">${accountLabel}</span>
+          <span class="mv green">${fmt(debtAutoApply)}</span>
+        </div>`;
+    }
+
+    const netVal = bigSide.total - offSide.total - (debtAutoApply || 0);
+    accDebtHtml += '<div class="ms-row" style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px">'+
+      '<span class="ml" style="font-weight:600">Итог: <b style="color:var(--text)">'+bigSide.name+'</b> должен <b style="color:var(--text)">'+toDative(bigSide.other)+'</b></span>'+
+      '<span class="mv yellow">'+fmt(Math.max(0,netVal))+'</span></div>';
+    let formula = fmt(bigSide.total) + ' − ' + fmt(offSide.total);
+    if (debtAutoApply > 0) formula += ' − ' + fmt(debtAutoApply) + ' (наличными)';
+    accDebtHtml += '<div class="ms-row"><span class="ml" style="font-size:11px;color:var(--muted)">'+formula+'</span></div>';
+  }
+
+  document.getElementById('dist-accdebt').innerHTML = accDebtHtml;
+  document.getElementById('dist-accdebt-wrap').style.display = 'block';
+
+  // Подсказка не нужна — некратный остаток автоматически в общак
+  document.getElementById('pool-hint').style.display = 'none';
+
+  const ab1 = document.getElementById('apply-btn1'); if (ab1) ab1.style.display = 'inline-block';
+
+  // Если вторая модалка открыта — обновляем её в реальном времени
+  if (document.getElementById('modal2').style.display !== 'none') {
+    renderReviewModal();
+  }
+}
+
+
+
+function _commitDistribution(p1Share, p2Share, _poolAmtParam, withDebtAdj) {
+  const { unsplitItems, personalExpItems } = getFreeSums();
+
+  const inclManualForCommit = (document.getElementById('include-manual-debts')||{}).checked !== false;
+  const settleDate = today();
+  let combinedDebt = 0, combinedDebtorName = null, combinedCreditorName = null;
+  const newDistId = Date.now();
+  const createdPaymentRefs = []; // { type, ref, paymentId } — для отката при отмене
+  var debtSnapshot = null;
+
+  if (inclManualForCommit) {
+    // ═══ ПОЛНЫЙ ВЗАИМОЗАЧЁТ: гасим ВСЕ источники долга обеих сторон, создаём один новый ═══
+    let p1total = 0, p2total = 0; // p1total = сколько всего должен Руслан Ильнуру (до зачёта)
+    const allSources = []; // { type, ref, rem, side: 'p1'|'p2' }
+
+    for (const dist of state.distributions) {
+      const r = dist.result;
+      if (!r) continue;
+      if (r.debtTail && r.debtTail > 0.01 && r.debtorName) {
+        const paid = (r.payments||[]).reduce((s,p)=>s+p.amount,0);
+        const rem = Math.max(0, r.debtTail - paid);
+        if (rem > 0.01) {
+          const side = r.debtorName === state.p1 ? 'p1' : 'p2';
+          allSources.push({ type:'dist', ref:r, rem, side });
+          if (side==='p1') p1total += rem; else p2total += rem;
+        }
+      }
+      if (r.accountDebt && r.accountDebt > 0 && !r.accountDebtSettled) {
+        const paid = (r.acctPayments||[]).reduce((s,p)=>s+p.amount,0);
+        const rem = Math.max(0, r.accountDebt - paid);
+        if (rem > 0.01) { allSources.push({ type:'acct', ref:r, rem, side:'p1' }); p1total += rem; }
+      }
+    }
+    for (const d of (state.manualDebts||[])) {
+      const paid = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
+      const rem = Math.max(0, d.amount - paid);
+      if (rem > 0.01) {
+        allSources.push({ type:'manual', ref:d, rem, side: d.debtor });
+        if (d.debtor==='p1') p1total += rem; else p2total += rem;
+      }
+    }
+    // Долг по текущим (ещё не распределённым) расходам тоже участвует в зачёте
+    if (_draft.currentDebtorName) {
+      const side = _draft.currentDebtorName === state.p1 ? 'p1' : 'p2';
+      if (side==='p1') p1total += _draft.currentDebtRaw; else p2total += _draft.currentDebtRaw;
+      // помечаем отдельно — это не существующий объект, гасить через payments не нужно,
+      // просто учитываем в сумме напрямую (он попадёт в combinedDebt после взаимозачёта)
+    }
+
+    // Гасим ВСЕ источники полностью (зачёт происходит логически, через payments = remaining)
+    for (const src of allSources) {
+      const payment = { id: Date.now() + Math.random(), date: settleDate, amount: src.rem, createdByDist: newDistId };
+      if (src.type === 'dist') {
+        if (!src.ref.payments) src.ref.payments = [];
+        src.ref.payments.push(payment);
+      } else if (src.type === 'acct') {
+        if (!src.ref.acctPayments) src.ref.acctPayments = [];
+        src.ref.acctPayments.push(payment);
+        src.ref.accountDebtSettled = true;
+        src.ref.accountDebtSettledByDist = newDistId;
+      } else if (src.type === 'manual') {
+        if (!src.ref.payments) src.ref.payments = [];
+        src.ref.payments.push(payment);
+      }
+    }
+
+    // Снимок: начальный (до зачёта) долг каждой стороны и финальный после зачёта — для отображения в журнале
+    var debtSnapshotBigName = p1total >= p2total ? state.p1 : state.p2;
+    var debtSnapshotBigOther = p1total >= p2total ? state.p2 : state.p1;
+    var debtSnapshotBigTotal = Math.max(p1total, p2total);
+    var debtSnapshotOffName = p1total >= p2total ? state.p2 : state.p1;
+    var debtSnapshotOffOther = p1total >= p2total ? state.p1 : state.p2;
+    var debtSnapshotOffTotal = Math.min(p1total, p2total);
+
+    // Новый итоговый долг — чистая разница минус то что уже погашено наличными в этом распределении
+    const netRaw = p1total - p2total; // >0 = Руслан должен Ильнуру
+    const afterCash = netRaw - (_draft.debtAutoApply || 0) * (netRaw > 0 ? 1 : -1);
+    combinedDebt = Math.abs(afterCash);
+    if (combinedDebt > 0.01) {
+      combinedDebtorName   = afterCash > 0 ? state.p1 : state.p2;
+      combinedCreditorName = afterCash > 0 ? state.p2 : state.p1;
+    }
+    // Детальные списки источников для тултипов
+    const bigIsP1 = p1total >= p2total;
+    const bigSources = allSources.filter(s => s.side === (bigIsP1 ? 'p1' : 'p2'));
+    const offSources = allSources.filter(s => s.side === (bigIsP1 ? 'p2' : 'p1'));
+    function srcLabel(s) {
+      if (s.type === 'manual') return (s.ref.desc ? s.ref.desc : 'ручной долг') + ' от ' + fmtDateRu(s.ref.date) + ': ' + fmt(s.rem);
+      if (s.type === 'acct') return 'долг со счёта: ' + fmt(s.rem);
+      return 'долг от предыдущего распределения: ' + fmt(s.rem);
+    }
+    const bigList = bigSources.map(srcLabel);
+    const offList = offSources.map(srcLabel);
+    if (_draft.currentDebtorName) {
+      const line = 'долг по текущим расходам: ' + fmt(_draft.currentDebtRaw);
+      if ((_draft.currentDebtorName === state.p1) === bigIsP1) bigList.push(line); else offList.push(line);
+    }
+
+    var debtSnapshot = {
+      bigName: debtSnapshotBigName, bigOther: debtSnapshotBigOther, bigTotal: debtSnapshotBigTotal, bigList: bigList,
+      offName: debtSnapshotOffName, offOther: debtSnapshotOffOther, offTotal: debtSnapshotOffTotal, offList: offList,
+      cashApplied: _draft.debtAutoApply || 0,
+      finalDebtorName: combinedDebtorName, finalCreditorName: combinedCreditorName, finalAmount: combinedDebt
+    };
+  } else {
+    // Без галочки: гасим только то что было зачтено наличными (старое поведение для не-ручных долгов)
+    let toSettle = _draft.debtAutoApply || 0;
+    if (toSettle > 0.01) {
+      const debtorSide = _draft.debtorName;
+      const sources = [];
+      for (const dist of state.distributions) {
+        const r = dist.result;
+        if (!r) continue;
+        if (r.debtTail && r.debtTail > 0.01 && r.debtorName === debtorSide) {
+          const paid = (r.payments||[]).reduce((s,p)=>s+p.amount,0);
+          const rem = Math.max(0, r.debtTail - paid);
+          if (rem > 0.01) sources.push({ type:'dist', ref:r, rem, ts: dist.ts });
+        }
+        if (r.accountDebt && r.accountDebt > 0 && !r.accountDebtSettled && debtorSide === state.p1) {
+          const paid = (r.acctPayments||[]).reduce((s,p)=>s+p.amount,0);
+          const rem = Math.max(0, r.accountDebt - paid);
+          if (rem > 0.01) sources.push({ type:'acct', ref:r, rem, ts: dist.ts });
+        }
+      }
+      sources.sort((a,b) => (a.ts < b.ts ? -1 : 1));
+      for (const src of sources) {
+        if (toSettle < 0.01) break;
+        const pay = Math.min(toSettle, src.rem);
+        const payment = { id: Date.now() + Math.random(), date: settleDate, amount: pay, createdByDist: newDistId };
+        if (src.type === 'dist') {
+          if (!src.ref.payments) src.ref.payments = [];
+          src.ref.payments.push(payment);
+        } else {
+          if (!src.ref.acctPayments) src.ref.acctPayments = [];
+          src.ref.acctPayments.push(payment);
+          const tp = src.ref.acctPayments.reduce((s,p)=>s+p.amount,0);
+          if (tp >= (src.ref.accountDebt||0) - 0.01) { src.ref.accountDebtSettled = true; src.ref.accountDebtSettledByDist = newDistId; }
+        }
+        toSettle -= pay;
+      }
+    }
+    combinedDebt = _draft.currentDebtRaw || 0;
+    combinedDebtorName   = combinedDebt > 0.01 ? (_draft.currentDebtorName || state.p1) : null;
+    combinedCreditorName = combinedDebt > 0.01 ? (_draft.currentCreditorName || state.p2) : null;
+  }
+
+  // Используем итоговый общак (введённый + неделимый остаток)
+  const poolAmt = _draft.totalPoolAmt != null ? _draft.totalPoolAmt : (_draft.poolAmt || 0);
+  const dist = {
+    id: newDistId,
+    ts: new Date().toISOString(),
+    incomeIds: unsplitItems.map(i => i.id),
+    expenseIds: personalExpItems.map(e => e.id),
+    mode: 'manual',
+    result: {
+      p1Share, p2Share, poolAmt,
+      p1Exp: _draft.p1Exp, p2Exp: _draft.p2Exp,
+      withDebtAdj: withDebtAdj || false,
+      debtTail: combinedDebt > 0.01 ? combinedDebt : null,
+      debtorName: combinedDebtorName,
+      creditorName: combinedCreditorName,
+      accountDebt: _draft.ilnurFromRuslan || 0,
+      cashDebt: 0,  // поглощён в debtTail
+      cashTotal: _draft.cashTotal || 0,
+      ruslanAcctTotal: _draft.ruslanAcctTotal || 0,
+      currentDebtRaw: _draft.currentDebtRaw || 0,
+      currentDebtorName: _draft.currentDebtorName || null,
+      currentCreditorName: _draft.currentCreditorName || null,
+      debtSnapshot: debtSnapshot
+    },
+    tailIncome: null
+  };
+
+  state.income.forEach(i => {
+    if (dist.incomeIds.includes(i.id)) i.status = 'split';
+  });
+
+  state.distributions.push(dist);
+
+  save();
+  closeDistModal();
+  renderAll();
+}
+
+function _undoDistributionInternal(distId) {
+  const dist = state.distributions.find(d => d.id === distId);
+  if (!dist) return;
+  state.income.forEach(i => {
+    if (dist.incomeIds.includes(i.id)) i.status = 'unsplit';
+  });
+
+  // Откатываем платежи, созданные этим распределением (взаимозачёт долгов)
+  for (const d of state.distributions) {
+    if (d.id === distId) continue;
+    if (d.result.payments) {
+      d.result.payments = d.result.payments.filter(p => p.createdByDist !== distId);
+    }
+    if (d.result.acctPayments) {
+      d.result.acctPayments = d.result.acctPayments.filter(p => p.createdByDist !== distId);
+    }
+    if (d.result.accountDebtSettledByDist === distId) {
+      delete d.result.accountDebtSettledByDist;
+      delete d.result.accountDebtSettled;
+    }
+    if (d.result.settledByDist === distId) delete d.result.settledByDist;
+  }
+  for (const d of (state.manualDebts||[])) {
+    if (d.payments) {
+      d.payments = d.payments.filter(p => p.createdByDist !== distId);
+    }
+    if (d.settledByDist === distId) delete d.settledByDist;
+  }
+
+  state.distributions = state.distributions.filter(d => d.id !== distId);
+}
+
+function undoDistribution(distId) {
+  _undoDistributionInternal(distId);
+  save();
+  renderAll();
+}
+
+
+// ═══ DEBT PAYMENT ═══
+let _payTarget = null;
+
+function getDebtRemaining(target) {
+  if (target.type === 'dist') {
+    const dist = state.distributions.find(d => d.id === target.id);
+    if (!dist) return 0;
+    const paid = (dist.result.payments || []).reduce((s,p)=>s+p.amount,0);
+    return Math.max(0, dist.result.debtTail - paid);
+  } else if (target.type === 'acct') {
+    const dist = state.distributions.find(d => d.id === target.id);
+    if (!dist) return 0;
+    const paid = (dist.result.acctPayments || []).reduce((s,p)=>s+p.amount,0);
+    return Math.max(0, dist.result.accountDebt - paid);
+  } else {
+    const d = state.manualDebts.find(d => d.id === target.id);
+    if (!d) return 0;
+    const paid = (d.payments || []).reduce((s,p)=>s+p.amount,0);
+    return Math.max(0, d.amount - paid);
+  }
+}
+
+function openPayModal(type, id) {
+  _payTarget = { type, id };
+  const remaining = getDebtRemaining(_payTarget);
+  var debtorName = '', creditorName = '';
+  if (type === 'dist') {
+    var r = state.distributions.find(d => d.id === id);
+    if (r) { debtorName = r.result.debtorName || state.p1; creditorName = r.result.creditorName || state.p2; }
+  } else if (type === 'acct') {
+    debtorName = state.p1; creditorName = state.p2;
+  } else {
+    var d = state.manualDebts.find(d => d.id === id);
+    if (d) { debtorName = d.debtor === 'p1' ? state.p1 : state.p2; creditorName = d.creditor === 'p1' ? state.p1 : state.p2; }
+  }
+  document.getElementById('pay-modal-info').innerHTML = '<div class="ms-block"><div class="ms-row"><span class="ml"><b>'+debtorName+'</b> должен <b>'+toDative(creditorName)+'</b></span><span class="mv yellow">'+fmt(remaining)+'</span></div></div>';
+  document.getElementById('pay-amount').value = '';
+  document.getElementById('pay-date').value = today();
+  document.getElementById('pay-full-amount').textContent = fmt(remaining);
+  document.getElementById('pay-modal').style.display = 'flex';
+  document.getElementById('pay-modal').classList.add('open');
+  setTimeout(function(){ document.getElementById('pay-amount').focus(); }, 50);
+}
+
+function setFullPayment() {
+  document.getElementById('pay-amount').value = getDebtRemaining(_payTarget);
+}
+
+function closePayModal() {
+  document.getElementById('pay-modal').style.display = 'none';
+  document.getElementById('pay-modal').classList.remove('open');
+  _payTarget = null;
+}
+
+function confirmPayment() {
+  if (!_payTarget) return;
+  var amount = parseFloat(document.getElementById('pay-amount').value) || 0;
+  var date = document.getElementById('pay-date').value || today();
+  if (!amount) { alert('Введите сумму'); return; }
+  var remaining = getDebtRemaining(_payTarget);
+  if (amount > remaining + 0.01) { alert('Сумма больше остатка долга'); return; }
+  var payment = { id: Date.now(), date: date, amount: amount };
+  if (_payTarget.type === 'dist') {
+    var dist = state.distributions.find(d => d.id === _payTarget.id);
+    if (!dist.result.payments) dist.result.payments = [];
+    dist.result.payments.push(payment);
+  } else if (_payTarget.type === 'acct') {
+    var dist = state.distributions.find(d => d.id === _payTarget.id);
+    if (!dist.result.acctPayments) dist.result.acctPayments = [];
+    dist.result.acctPayments.push(payment);
+    var totalPaid = dist.result.acctPayments.reduce(function(s,p){return s+p.amount;},0);
+    if (totalPaid >= dist.result.accountDebt - 0.01) dist.result.accountDebtSettled = true;
+  } else {
+    var d = state.manualDebts.find(d => d.id === _payTarget.id);
+    if (!d.payments) d.payments = [];
+    d.payments.push(payment);
+  }
+  save();
+  closePayModal();
+  renderAll();
+}
+
+function deletePayment(type, debtId, payId) {
+  if (type === 'dist') {
+    var dist = state.distributions.find(d => d.id === debtId);
+    dist.result.payments = (dist.result.payments||[]).filter(function(p){return p.id!==payId;});
+  } else if (type === 'acct') {
+    var dist = state.distributions.find(d => d.id === debtId);
+    dist.result.acctPayments = (dist.result.acctPayments||[]).filter(function(p){return p.id!==payId;});
+    dist.result.accountDebtSettled = false;
+  } else {
+    var d = state.manualDebts.find(d => d.id === debtId);
+    d.payments = (d.payments||[]).filter(function(p){return p.id!==payId;});
+  }
+  save(); renderAll();
+}
+
+function confirmUndoDistribution(distId) {
+  if (confirm('Отменить распределение?\n\nВсе записи будут возвращены в журнал как нераспределённые. Долги и остатки этого распределения будут удалены.')) {
+    undoDistribution(distId);
+  }
+}
+
+function applyFromModal1() {
+  if (!_draft) return;
+  _commitDistribution(_draft.p1Income, _draft.p2Income, _draft.totalPoolAmt, false);
+}
+
+
+function openModal2() { openReviewModal(); }
+function closeModal2() { closeReviewModal(); }
+
+function renderReviewModal() {
+  if (!_draft) return;
+  const d = _draft;
+
+  // Касса
+  let cashHtml = '';
+  cashHtml += `<div class="ms-row"><span class="ml">Наличка в кассе</span><span class="mv green">${fmt(d.cashTotal)}</span></div>`;
+  if (d.ruslanAcctTotal > 0) {
+    cashHtml += `<div class="ms-row"><span class="ml">На счёте ${state.p1}</span><span class="mv" style="color:var(--p2)">${fmt(d.ruslanAcctTotal)}</span></div>`;
+  }
+  document.getElementById('review-cash').innerHTML = cashHtml;
+
+  // Выплаты
+  let payHtml = '';
+  payHtml += `<div class="ms-row"><span class="ml">Положить в общак</span><span class="mv">${fmt(d.totalPoolAmt)}</span></div>`;
+  payHtml += `<div class="ms-row"><span class="ml">${state.p1} забирает наличкой</span><span class="mv p1c">${fmt(d.ruslanFromCash || 0)}</span></div>`;
+  payHtml += `<div class="ms-row"><span class="ml">${state.p2} забирает наличкой</span><span class="mv p2c">${fmt(d.ilnurFromCash || 0)}</span></div>`;
+  if (d.ilnurFromRuslan > 0) {
+    payHtml += `<div class="ms-row"><span class="ml">${state.p1} передаёт ${state.p2} со счёта</span><span class="mv yellow">${fmt(d.ilnurFromRuslan)}</span></div>`;
+    if (d.debtAutoApply > 0) {
+      payHtml += `<div class="ms-row"><span class="ml" style="font-size:11px;color:var(--muted);padding-left:10px">в т.ч. погашение долга</span><span class="mv" style="font-size:11px;color:var(--muted)">${fmt(d.debtAutoApply)}</span></div>`;
+    }
+  }
+  document.getElementById('review-payouts').innerHTML = payHtml;
+
+  // Остатки долгов
+  const combinedDebtVal = (d.debtTailAfterAuto || 0) + (d.cashDebtToIlnur || 0);
+  const reviewDebtsWrap = document.getElementById('review-debts-wrap');
+  if (combinedDebtVal > 0.01) {
+    reviewDebtsWrap.style.display = 'block';
+    const dn = d.debtorName || state.p1;
+    const cn = d.creditorName || state.p2;
+    let debtsHtml = `<div class="ms-row"><span class="ml"><b style="color:var(--text)">${dn}</b> должен <b style="color:var(--text)">${toDative(cn)}</b> (перенос на след. период)</span><span class="mv yellow">${fmt(combinedDebtVal)}</span></div>`;
+    if (d.cashDebtToIlnur > 0.01) {
+      debtsHtml += `<div class="ms-row"><span class="ml" style="font-size:11px;color:var(--muted);padding-left:10px">в т.ч. некратный остаток от распределения доходов</span><span class="mv" style="font-size:11px;color:var(--muted)">${fmt(d.cashDebtToIlnur)}</span></div>`;
+    }
+    if (d.debtTailAfterAuto > 0.01) {
+      debtsHtml += `<div class="ms-row"><span class="ml" style="font-size:11px;color:var(--muted);padding-left:10px">в т.ч. некратный остаток после зачёта расходов</span><span class="mv" style="font-size:11px;color:var(--muted)">${fmt(d.debtTailAfterAuto)}</span></div>`;
+    }
+    document.getElementById('review-debts').innerHTML = debtsHtml;
+  } else {
+    reviewDebtsWrap.style.display = 'none';
+  }
+}
+
+function openReviewModal() {
+  renderReviewModal();
+  document.getElementById('modal2').style.display = 'block';
+}
+
+function closeReviewModal() {
+  document.getElementById('modal2').style.display = 'none';
+}
+
+// ═══ MODAL OPEN/CLOSE ═══
+let _redistDistId = null;
+let _redistIncIds = null;
+let _redistExpIds = null;
+
+function openDistModal() {
+  _draft = null;
+  const ab1b = document.getElementById('apply-btn1'); if (ab1b) ab1b.style.display = 'none';
+  const poolInput = document.getElementById('pool-input');
+  if (poolInput) { poolInput.value = ''; poolInput.style.borderColor = ''; }
+  const sharesRows = document.getElementById('dist-shares-rows');
+  if (sharesRows) sharesRows.innerHTML = '';
+  const debtsWrap = document.getElementById('dist-debts-wrap');
+  if (debtsWrap) debtsWrap.style.display = 'none';
+  const accDebtWrap = document.getElementById('dist-accdebt-wrap');
+  if (accDebtWrap) accDebtWrap.style.display = 'none';
+  const hintEl = document.getElementById('pool-hint');
+  if (hintEl) hintEl.style.display = 'none';
+    _denom = 1000;
+  document.querySelectorAll('.denom-btn').forEach(b => b.classList.remove('active'));
+  const d0 = document.getElementById('denom-1000');
+  if (d0) d0.classList.add('active');
+  document.getElementById('dist-modal').classList.add('open');
+  document.getElementById('modal2').style.display = 'block';
+  suggestDistribution();
+}
+
+function closeDistModal() {
+  document.getElementById('dist-modal').classList.remove('open');
+  document.getElementById('modal2').style.display = 'none';
+  document.getElementById('modal1').classList.remove('dimmed');
+  _draft = null;
+}
+
+// ═══ MANUAL DEBTS ═══
+function addManualDebt() {
+  const date   = document.getElementById('debt-date').value || today();
+  const amount = parseFloat(document.getElementById('debt-amount').value) || 0;
+  const desc   = document.getElementById('debt-desc').value.trim();
+  const debtor = document.getElementById('debt-debtor').value;
+  if (!amount) { alert('Введите сумму'); return; }
+  const creditor = debtor === 'p1' ? 'p2' : 'p1';
+  state.manualDebts.push({ id: Date.now(), date, amount, desc, debtor, creditor });
+  save();
+  document.getElementById('debt-amount').value = '';
+  document.getElementById('debt-desc').value = '';
+  renderAll();
+}
+
+function clearDistDebt(distId, type) {
+  if (!confirm('Удалить запись долга?')) return;
+  const dist = state.distributions.find(d => d.id === distId);
+  if (!dist) return;
+  if (type === 'tail') {
+    dist.result.debtTail = null;
+    dist.result.debtorName = null;
+    dist.result.creditorName = null;
+    dist.result.payments = [];
+  } else if (type === 'acct') {
+    dist.result.accountDebt = 0;
+    dist.result.accountDebtSettled = true;
+    dist.result.acctPayments = [];
+  }
+  save(); renderAll();
+}
+
+function deleteManualDebt(id) {
+  state.manualDebts = state.manualDebts.filter(d => d.id !== id);
+  save(); renderAll();
+}
+
+// ═══ RENDER ALL ═══
+function renderAll() {
+  const s = calc();
+  renderCards(s);
+  renderJournal();
+  renderDebtBalance();
+  syncExpWho();
+  syncSettingsNames();
+}
+
+function syncExpWho() {
+  const whoSel = document.getElementById('exp-who');
+  if (whoSel) { whoSel.options[1].text = state.p1; whoSel.options[2].text = state.p2; }
+  const debtorSel = document.getElementById('debt-debtor');
+  if (debtorSel) { debtorSel.options[0].text = state.p1; debtorSel.options[1].text = state.p2; }
+}
+
+function syncSettingsNames() {
+  const n1 = document.getElementById('name-p1');
+  const n2 = document.getElementById('name-p2');
+  if (n1) n1.value = state.p1;
+  if (n2) n2.value = state.p2;
+}
+
+function renderCards(s) {
+  const html = `
+    <div class="card">
+      <div class="lbl">Всего доходов</div>
+      <div class="val green">${fmt(s.totalInc)}</div>
+      <div class="sub">${state.income.length} записей</div>
+    </div>
+    <div class="card">
+      <div class="lbl">Не поделено</div>
+      <div class="val yellow">${fmt(s.unsplitInc)}</div>
+      <div class="sub">ждёт раздела</div>
+    </div>
+    <div class="card">
+      <div class="lbl">Поделено — итого</div>
+      <div class="val cp1">${fmt(s.splitInc)}</div>
+      <div class="sub">по ${fmt(s.eachSplit)} каждому</div>
+    </div>
+    <div class="card">
+      <div class="lbl">Общак — баланс</div>
+      <div class="val ${s.poolBalance>=0?'green':'red'}">${fmt(s.poolBalance)}</div>
+      <div class="sub">+${fmt(s.pooledInc)} −${fmt(s.poolExp)}</div>
+    </div>
+    <div class="card">
+      <div class="lbl">Всего расходов</div>
+      <div class="val red">${fmt(s.totalExp)}</div>
+      <div class="sub">${state.expenses.length} записей</div>
+    </div>
+  `;
+  const mainEl = document.getElementById('summary-cards');
+  if (mainEl) mainEl.innerHTML = html;
+  const anEl = document.getElementById('analytics-cards');
+  if (anEl) anEl.innerHTML = html;
+}
+
+function renderPersons(s) {
+  ['p1','p2'].forEach((p,i) => {
+    const el = document.getElementById('pc-'+p);
+    if (!el) return;
+    const name = i===0 ? state.p1 : state.p2;
+    const exp  = i===0 ? s.p1Exp : s.p2Exp;
+    const com  = i===0 ? s.p1Common : s.p2Common;
+    el.innerHTML = `
+      <div class="person-head ${p}">${name}</div>
+      <div class="person-body">
+        <div class="stat-row"><span class="sl">Доля от раздела</span><span class="sv green">${fmt(s.eachSplit)}</span></div>
+        <div class="stat-row"><span class="sl">Свои расходы (всего)</span><span class="sv red">${fmt(exp)}</span></div>
+        <div class="stat-row"><span class="sl">из них на общие цели</span><span class="sv yellow">${fmt(com)}</span></div>
+      </div>
+    `;
+  });
+}
+
+function renderDebt(s) {
+  let html = '<h3>⚖️ Взаиморасчёт</h3>';
+  if (s.unsplitInc > 0) {
+    html += `<div class="debt-row"><span>Нераспределённый доход</span><span class="mono yellow">${fmt(s.unsplitInc)}</span></div>`;
+  }
+  if (Math.abs(s.commonDiff) > 0.01) {
+    const creditor = s.commonDiff > 0 ? state.p1 : state.p2;
+    const debtor   = s.commonDiff > 0 ? state.p2 : state.p1;
+    html += `<div class="debt-row"><span><b>${debtor}</b> должен <b>${toDative(creditor)}</b></span><span class="mono red">${fmt(Math.abs(s.commonDiff)/2)}</span></div>`;
+  } else {
+    html += `<div class="debt-row"><span>Общие расходы</span><span class="mono green">Паритет ✓</span></div>`;
+  }
+  if (s.unsplitInc === 0 && Math.abs(s.commonDiff) < 0.01) {
+    html += `<div style="color:var(--muted);padding:10px 0;font-size:12px;text-align:center">Всё чисто 🎉</div>`;
+  }
+  const el = document.getElementById('debt-block');
+  if (el) el.innerHTML = html;
+}
+
+// ═══ JOURNAL RENDER ═══
+const MONTH_NAMES_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+let _selectedMonthKey = null; // 'YYYY-MM' или null = последний доступный
+
+function monthKey(dateStr) {
+  if (!dateStr) return '0000-00';
+  try {
+    return String(dateStr).slice(0, 7);
+  } catch(e) { return '0000-00'; }
+}
+
+function getAvailableMonths() {
+  const keys = new Set();
+  for (const dist of (state.distributions || [])) {
+    if (dist && dist.ts) keys.add(monthKey(dist.ts));
+  }
+  const now = new Date();
+  const curKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  keys.add(curKey);
+  return [...keys].filter(k => k !== '0000-00').sort();
+}
+
+function renderMonthTabs() {
+  const wrap = document.getElementById('month-tabs');
+  if (!wrap) return;
+  const months = getAvailableMonths();
+  if (!months.length) { wrap.innerHTML = ''; return; }
+  if (!_selectedMonthKey || !months.includes(_selectedMonthKey)) {
+    _selectedMonthKey = months[months.length - 1]; // последний (текущий) по умолчанию
+  }
+  let html = '';
+  for (const mk of months) {
+    const [y, m] = mk.split('-');
+    const label = MONTH_NAMES_RU[parseInt(m,10)-1] + ' ' + y;
+    const active = mk === _selectedMonthKey ? ' active' : '';
+    html += '<button class="month-tab'+active+'" onclick="selectMonth(\''+mk+'\')">'+label+'</button>';
+  }
+  wrap.innerHTML = html;
+}
+
+function selectMonth(mk) {
+  _selectedMonthKey = mk;
+  renderJournal();
+}
+
+function renderJournal() {
+  renderMonthTabs();
+  const tbody = document.getElementById('journal-tbody');
+  const months = getAvailableMonths();
+  const isLastMonth = _selectedMonthKey === months[months.length - 1];
+
+  // collect all distribution member ids
+  const distIncIds = new Set(state.distributions.flatMap(d => d.incomeIds));
+  const distExpIds = new Set(state.distributions.flatMap(d => d.expenseIds));
+
+  // free (undistributed) entries — показываются только в последней (текущей) вкладке
+  const freeInc = isLastMonth ? state.income.filter(i => !distIncIds.has(i.id)) : [];
+  const freeExp = isLastMonth ? state.expenses.filter(e => !distExpIds.has(e.id)) : [];
+
+  const freeRows = [
+    ...freeInc.map(i => ({ ...i, kind: 'income' })),
+    ...freeExp.map(e => ({ ...e, kind: 'expense' }))
+  ].sort((a,b) => b.id - a.id);
+
+  // Build rows array
+  let rows = [];
+
+  // 1. Distributions of selected month (newest first)
+  const sortedDists = [...state.distributions]
+    .filter(d => monthKey(d.ts) === _selectedMonthKey)
+    .sort((a,b) => b.id - a.id);
+  for (const dist of sortedDists) {
+    const incItems = state.income.filter(i => dist.incomeIds.includes(i.id));
+    const expItems = state.expenses.filter(e => dist.expenseIds.includes(e.id));
+    rows.push({ type: 'group', dist, incItems, expItems });
+  }
+
+  // 2. Free entries (только в текущем месяце)
+  for (const row of freeRows) {
+    rows.push({ type: 'free', row });
+  }
+
+  document.getElementById('journal-count').textContent =
+    state.income.length + state.expenses.length + (state.manualDebts || []).length;
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">Нет операций в этом месяце</td></tr>';
+    return;
+  }
+
+  let html = '';
+  for (const item of rows) {
+    if (item.type === 'group') {
+      html += renderGroup(item.dist, item.incItems, item.expItems);
+    } else {
+      html += renderFreeRow(item.row);
+    }
+  }
+  tbody.innerHTML = html;
+}
+
+
+
+
+function renderPaymentRows(type, debtId, payments) {
+  if (!payments || payments.length === 0) return '';
+  var rows = '';
+  for (var ri = 0; ri < payments.length; ri++) {
+    var p = payments[ri];
+    var onclick = "deletePayment(" + JSON.stringify(type) + "," + debtId + "," + p.id + ")";
+    rows += '<tr style="opacity:.45">';
+    rows += '<td class="mono" style="font-size:10px;padding-left:28px;color:var(--muted)">' + p.date + '</td>';
+    rows += '<td><span style="font-size:9px;color:var(--muted)">↳ погашено</span></td>';
+    rows += '<td class="mono" style="font-size:11px;color:var(--muted)">' + fmt(p.amount) + '</td>';
+    rows += '<td style="font-size:11px;color:var(--muted)">частичное погашение</td>';
+    rows += '<td></td>';
+    rows += '<td><button class="del-btn" style="font-size:11px" onclick="' + onclick + '">×</button></td>';
+    rows += '</tr>';
+  }
+  return rows;
+}
+
+
+function renderFreeRow(row) {
+  if (row.kind === 'income') {
+    const statusTag = row.status === 'split'
+      ? '<span class="tag split">✓ Поделено</span>'
+      : row.status === 'pooled'
+        ? '<span class="tag pooled">→ В общаке</span>'
+        : '<span class="tag" style="color:var(--yellow);border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.08)">⏳ Свободный</span>';
+    const formTag = row.form === 'ruslan'
+      ? '<span class="type-badge" style="background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.3);color:var(--p2);font-size:9px">₽ Руслан</span>'
+      : '';
+    return `<tr data-id="${row.id}" data-kind="income">
+      <td class="mono muted-date">${row.date}</td>
+      <td><span class="type-badge income-badge">↑ Доход</span> ${formTag}</td>
+      <td class="mono green">${fmt(row.amount)}</td>
+      <td>${row.desc}</td>
+      <td>${statusTag}</td>
+      <td style="display:flex;gap:2px;align-items:center">
+        <button class="edit-btn" onclick="startEdit(${row.id},'income')" title="Редактировать">✎</button>
+        <button class="del-btn" onclick="deleteIncome(${row.id})">×</button>
+      </td>
+    </tr>`;
+  } else if (row.kind === 'manual-debt') {
+    if (row.settledByDist) return ''; // учтён в распределении — скрываем
+    const debtorName   = row.debtor   === 'p1' ? state.p1 : state.p2;
+    const creditorName = row.creditor === 'p1' ? state.p1 : state.p2;
+    const mdPaid = (row.payments||[]).reduce((s,p)=>s+p.amount,0);
+    const mdRem  = Math.max(0, row.amount - mdPaid);
+    const mdDone = mdRem < 0.01;
+    const mdAmtTxt = fmt(mdRem) + (mdPaid>0 ? ' <span style="color:var(--muted);font-size:10px">из '+fmt(row.amount)+'</span>' : '');
+    const mdBtn = !mdDone
+      ? '<button class="save-btn" onclick="openPayModal(\'manual\','+row.id+')" style="white-space:nowrap;font-size:11px">Погасить</button>'
+      : '<span style="font-size:11px;color:var(--muted)">✓</span>';
+    const mdRows = renderPaymentRows('manual', row.id, row.payments||[]);
+    return '<tr data-id="'+row.id+'" data-kind="manual-debt"'+(mdDone?' style="opacity:.55"':'')+'>'+
+      '<td class="mono muted-date">'+row.date+'</td>'+
+      '<td><span class="type-badge debt-badge">⟳ Долг</span></td>'+
+      '<td class="mono yellow">'+mdAmtTxt+'</td>'+
+      '<td>'+(row.desc||'—')+'</td>'+
+      '<td style="font-size:12px;color:var(--muted)"><b>'+debtorName+'</b> должен <b>'+toDative(creditorName)+'</b></td>'+
+      '<td style="display:flex;gap:2px;align-items:center">'+mdBtn+
+      '<button class="edit-btn" onclick="startEdit('+row.id+',\'manual-debt\')" title="Редактировать">✎</button>'+
+      '<button class="del-btn" onclick="deleteManualDebt('+row.id+')">×</button></td></tr>'+mdRows;
+  } else {
+    return `<tr data-id="${row.id}" data-kind="expense">
+      <td class="mono muted-date">${row.date}</td>
+      <td><span class="type-badge expense-badge">↓ Расход</span></td>
+      <td class="mono red">${fmt(row.amount)}</td>
+      <td>${row.desc}</td>
+      <td style="color:var(--muted);font-size:12px">${nameOf(row.who)}</td>
+      <td style="display:flex;gap:2px;align-items:center">
+        <button class="edit-btn" onclick="startEdit(${row.id},'expense')" title="Редактировать">✎</button>
+        <button class="del-btn" onclick="deleteExpense(${row.id})">×</button>
+      </td>
+    </tr>`;
+  }
+}
+
+// ═══ INLINE EDIT ═══
+function startEdit(id, kind) {
+  const tr = document.querySelector(`tr[data-id="${id}"][data-kind="${kind}"]`);
+  if (!tr) return;
+
+  if (kind === 'income') {
+    const item = state.income.find(i => i.id === id);
+    if (!item) return;
+    tr.classList.add('editing');
+    tr.innerHTML = `
+      <td><input class="edit-input dt" type="date" id="ei-date" value="${item.date}"></td>
+      <td>
+        <select class="edit-input" id="ei-form" style="width:120px;padding:3px 6px">
+          <option value="cash" ${(item.form||'cash')==='cash'?'selected':''}>Наличка</option>
+          <option value="ruslan" ${item.form==='ruslan'?'selected':''}>На счёт Руслану</option>
+        </select>
+      </td>
+      <td><input class="edit-input num" type="number" id="ei-amount" value="${item.amount}" min="0"></td>
+      <td><input class="edit-input" type="text" id="ei-desc" value="${item.desc}"></td>
+      <td></td>
+      <td style="display:flex;gap:4px;align-items:center">
+        <button class="save-btn" onclick="saveEdit(${id},'income')">✓</button>
+        <button class="cancel-btn" onclick="renderAll()">✕</button>
+      </td>
+    `;
+  } else if (kind === 'expense') {
+    const item = state.expenses.find(e => e.id === id);
+    if (!item) return;
+    tr.classList.add('editing');
+    tr.innerHTML = `
+      <td><input class="edit-input dt" type="date" id="ee-date" value="${item.date}"></td>
+      <td><span class="type-badge expense-badge">↓ Расход</span></td>
+      <td><input class="edit-input num" type="number" id="ee-amount" value="${item.amount}" min="0"></td>
+      <td><input class="edit-input" type="text" id="ee-desc" value="${item.desc}"></td>
+      <td>
+        <select class="edit-input" id="ee-who" style="width:120px;padding:3px 6px">
+          <option value="pool" ${item.who==='pool'?'selected':''}>Общак</option>
+          <option value="p1"   ${item.who==='p1'  ?'selected':''}>${state.p1}</option>
+          <option value="p2"   ${item.who==='p2'  ?'selected':''}>${state.p2}</option>
+        </select>
+      </td>
+      <td style="display:flex;gap:4px;align-items:center">
+        <button class="save-btn" onclick="saveEdit(${id},'expense')">✓</button>
+        <button class="cancel-btn" onclick="renderAll()">✕</button>
+      </td>
+    `;
+  } else if (kind === 'manual-debt') {
+    const item = state.manualDebts.find(d => d.id === id);
+    if (!item) return;
+    tr.classList.add('editing');
+    tr.innerHTML = `
+      <td><input class="edit-input dt" type="date" id="ed-date" value="${item.date}"></td>
+      <td><span class="type-badge debt-badge">⟳ Долг</span></td>
+      <td><input class="edit-input num" type="number" id="ed-amount" value="${item.amount}" min="0"></td>
+      <td><input class="edit-input" type="text" id="ed-desc" value="${item.desc||''}"></td>
+      <td>
+        <select class="edit-input" id="ed-debtor" style="width:130px;padding:3px 6px">
+          <option value="p1" ${item.debtor==='p1'?'selected':''}>${state.p1}</option>
+          <option value="p2" ${item.debtor==='p2'?'selected':''}>${state.p2}</option>
+        </select>
+      </td>
+      <td style="display:flex;gap:4px;align-items:center">
+        <button class="save-btn" onclick="saveEdit(${id},'manual-debt')">✓</button>
+        <button class="cancel-btn" onclick="renderAll()">✕</button>
+      </td>
+    `;
+  }
+}
+
+function saveEdit(id, kind) {
+  if (kind === 'income') {
+    const item = state.income.find(i => i.id === id);
+    if (!item) return;
+    const date   = document.getElementById('ei-date').value || today();
+    const amount = parseFloat(document.getElementById('ei-amount').value) || 0;
+    const desc   = document.getElementById('ei-desc').value.trim();
+    const form   = document.getElementById('ei-form').value;
+    if (!desc || !amount) { alert('Заполните описание и сумму'); return; }
+    item.date = date; item.amount = amount; item.desc = desc; item.form = form;
+  } else if (kind === 'expense') {
+    const item = state.expenses.find(e => e.id === id);
+    if (!item) return;
+    const date   = document.getElementById('ee-date').value || today();
+    const amount = parseFloat(document.getElementById('ee-amount').value) || 0;
+    const desc   = document.getElementById('ee-desc').value.trim();
+    const who    = document.getElementById('ee-who').value;
+    if (!desc || !amount) { alert('Заполните описание и сумму'); return; }
+    item.date = date; item.amount = amount; item.desc = desc; item.who = who;
+  } else if (kind === 'manual-debt') {
+    const item = state.manualDebts.find(d => d.id === id);
+    if (!item) return;
+    const date   = document.getElementById('ed-date').value || today();
+    const amount = parseFloat(document.getElementById('ed-amount').value) || 0;
+    const desc   = document.getElementById('ed-desc').value.trim();
+    const debtor = document.getElementById('ed-debtor').value;
+    if (!amount) { alert('Введите сумму'); return; }
+    item.date = date; item.amount = amount; item.desc = desc;
+    item.debtor = debtor; item.creditor = debtor === 'p1' ? 'p2' : 'p1';
+  }
+  save();
+  renderAll();
+}
+
+function renderGroup(dist, incItems, expItems) {
+  const gid = `grp-${dist.id}`;
+  const isOpen = _openGroups.has(dist.id);
+  const ts = new Date(dist.ts).toLocaleDateString('ru-RU', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const count = incItems.length + expItems.length;
+
+  const r = dist.result;
+  // Summary for collapsed header
+  let summary = '';
+  if (dist.mode === 'pool') {
+    summary = `→ общак ${fmt(r.pooled)}`;
+  } else {
+    const totalIncomeDist = (r.p1Share||0) + (r.p2Share||0) + (r.poolAmt||0);
+    summary = `Распределено: доходов ${fmt(totalIncomeDist)}`;
+  }
+
+  let html = '';
+
+  // Collapsible header row
+  html += `<tr class="group-header" style="cursor:pointer" onclick="toggleGroup(${dist.id})">
+    <td colspan="4" style="font-size:11px;letter-spacing:.4px">
+      <span style="color:var(--accent);margin-right:6px">${isOpen ? '▾' : '▸'}</span>
+      <span style="color:var(--muted)">📦 Распределение · ${ts} · ${count} записей</span>
+      ${!isOpen ? `<span style="margin-left:10px;color:var(--text);font-size:12px">${summary}</span>` : ''}
+    </td>
+    <td></td>
+    <td><button class="undo-btn" onclick="event.stopPropagation();confirmUndoDistribution(${dist.id})">↩ Отменить</button></td>
+  </tr>`;
+
+  if (isOpen) {
+    // Member rows
+    for (const i of incItems) {
+      html += `<tr class="group-member">
+        <td class="mono muted-date">${i.date}</td>
+        <td><span class="type-badge income-badge">↑ Доход</span></td>
+        <td class="mono green">${fmt(i.amount)}</td>
+        <td>${i.desc}</td>
+        <td></td><td></td>
+      </tr>`;
+    }
+    for (const e of expItems) {
+      html += `<tr class="group-member">
+        <td class="mono muted-date">${e.date}</td>
+        <td><span class="type-badge expense-badge">↓ Расход</span></td>
+        <td class="mono red">${fmt(e.amount)}</td>
+        <td>${e.desc}</td>
+        <td style="color:var(--muted);font-size:12px">${nameOf(e.who)}</td><td></td>
+      </tr>`;
+    }
+
+    // Result row
+    let resultDesc = '';
+    if (dist.mode === 'pool') {
+      resultDesc = `<div class="result-values"><span class="green">+${fmt(r.pooled)} → общак</span></div>`;
+    } else {
+      const totalIncomeDist = (r.p1Share||0) + (r.p2Share||0) + (r.poolAmt||0);
+      const cashPart = r.cashTotal || 0;
+      const acctPart = r.ruslanAcctTotal || 0;
+      const totalExp = (r.p1Exp||0) + (r.p2Exp||0);
+
+      resultDesc = '<div class="result-values" style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">';
+
+      // Строка 1: доходы
+      resultDesc += '<div>Распределено доходов: <b style="color:var(--green)">'+fmt(totalIncomeDist)+'</b>'+
+        (cashPart>0 ? ', из них наличкой <b style="color:var(--text)">'+fmt(cashPart)+'</b>' : '')+
+        (acctPart>0 ? ', поступило на счёт '+state.p1+' <b style="color:var(--text)">'+fmt(acctPart)+'</b>' : '')+
+        '</div>';
+
+      // Строка 2: расходы
+      if (totalExp > 0) {
+        let expLine = 'Расходы из личных денег: <b style="color:var(--red)">'+fmt(totalExp)+'</b>'+
+          ' <span style="color:var(--muted)">('+fmt(r.p1Exp||0)+' '+state.p1+' + '+fmt(r.p2Exp||0)+' '+state.p2+')</span>';
+        if (r.currentDebtorName) {
+          expLine += ' — <b style="color:var(--text)">'+r.currentDebtorName+'</b> должен <b style="color:var(--text)">'+toDative(r.currentCreditorName)+'</b> <b style="color:var(--yellow)">'+fmt(r.currentDebtRaw)+'</b>';
+        }
+        resultDesc += '<div>'+expLine+'</div>';
+      }
+
+      // Строка 3: учёт долгов (компактная формула с тултипами)
+      if (r.debtSnapshot && (r.debtSnapshot.bigTotal > 0.01 || r.debtSnapshot.offTotal > 0.01)) {
+        const ds = r.debtSnapshot;
+        const bigTip = (ds.bigList||[]).join('&#10;') || (ds.bigName+' должен '+toDative(ds.bigOther));
+        const offTip = (ds.offList||[]).join('&#10;') || (ds.offName+' должен '+toDative(ds.offOther));
+        let formula = '<div>Учёт долгов: ';
+        formula += '<b title="'+bigTip+'" style="color:var(--yellow);cursor:help;border-bottom:1px dotted var(--yellow)">'+fmt(ds.bigTotal)+'</b>';
+        if (ds.offTotal > 0.01) {
+          formula += ' − <b title="'+offTip+'" style="color:var(--red);cursor:help;border-bottom:1px dotted var(--red)">'+fmt(ds.offTotal)+'</b>';
+        }
+        if (ds.cashApplied > 0.01) {
+          formula += ' − <b style="color:var(--green)" title="учтено наличными/со счёта при этом распределении">'+fmt(ds.cashApplied)+'</b>';
+        }
+        formula += ' = <b style="color:var(--yellow)">'+fmt(ds.finalAmount)+'</b>';
+        formula += ds.finalAmount > 0.01
+          ? ' (<b style="color:var(--text)">'+ds.finalDebtorName+'</b> должен <b style="color:var(--text)">'+toDative(ds.finalCreditorName)+'</b>)'
+          : ' <span style="color:var(--green)">— долги взаимно погашены ✓</span>';
+        formula += '</div>';
+        resultDesc += formula;
+      } else if (r.debtTail && r.debtTail > 0.01 && r.debtorName) {
+        // Fallback для старых записей без debtSnapshot
+        resultDesc += '<div>Учёт долгов: <b style="color:var(--text)">'+r.debtorName+'</b> должен <b style="color:var(--text)">'+toDative(r.creditorName)+'</b>: <b style="color:var(--yellow)">'+fmt(r.debtTail)+'</b></div>';
+      }
+
+      resultDesc += '</div>';
+    }
+    html += `<tr class="group-result">
+      <td colspan="4">
+        <div class="result-label">Итог распределения</div>
+        ${resultDesc}
+      </td>
+      <td></td><td></td>
+    </tr>`;
+  }
+
+  // Account debt и debtTail — показываются в блоке над журналом, не здесь
+
+  // Ручные долги перенесённые в этот период (settledByDist === dist.id)
+  for (const d of (state.manualDebts||[])) {
+    if (d.settledByDist !== dist.id) continue;
+    const mdPaid = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
+    const mdRem  = Math.max(0, d.amount - mdPaid);
+    const mdDone = mdRem < 0.01;
+    const mdDebtorName   = d.debtor   === 'p1' ? state.p1 : state.p2;
+    const mdCreditorName = d.creditor === 'p1' ? state.p1 : state.p2;
+    const mdAmtTxt = mdDone ? fmt(d.amount) : fmt(mdRem) + (mdPaid>0 ? ' <span style="color:var(--muted);font-size:10px">из '+fmt(d.amount)+'</span>' : '');
+    const mdBtn = !mdDone
+      ? '<button class="save-btn" onclick="openPayModal(\'manual\','+d.id+')" style="white-space:nowrap;font-size:11px">Погасить</button>'
+      : '<span style="font-size:11px;color:var(--muted)">✓</span>';
+    html += '<tr class="group-tail"'+(mdDone?' style="opacity:.55"':'')+'>'+
+      '<td class="mono muted-date" style="font-size:11px">'+d.date+'</td>'+
+      '<td><span class="type-badge debt-badge">⟳ Долг</span></td>'+
+      '<td class="mono yellow">'+mdAmtTxt+'</td>'+
+      '<td style="font-size:12px;color:var(--muted)">'+(d.desc||'ручной долг')+' · <b>'+mdDebtorName+'</b> должен <b>'+toDative(mdCreditorName)+'</b></td>'+
+      '<td></td><td style="display:flex;gap:2px;align-items:center">'+mdBtn+
+      '<button class="edit-btn" onclick="startEdit('+d.id+',\'manual-debt\')" title="Редактировать">✎</button>'+
+      '<button class="del-btn" onclick="deleteManualDebt('+d.id+')">×</button></td></tr>';
+    if (d.payments && d.payments.length > 0) {
+      html += renderPaymentRows('manual', d.id, d.payments);
+    }
+  }
+
+  // Income tail row if exists — тоже всегда видна
+  if (dist.tailIncome && dist.tailIncome > 0) {
+    html += `<tr class="group-tail">
+      <td colspan="4" style="font-size:12px;color:var(--yellow)">
+        ↳ Остаток дохода ${fmt(dist.tailIncome)} — перенесён как нераспределённый
+      </td>
+      <td></td><td></td>
+    </tr>`;
+  }
+
+  return html;
+}
+
+// ═══ INCOME ═══
+function addIncome() {
+  const date   = document.getElementById('inc-date').value || today();
+  const desc   = document.getElementById('inc-desc').value.trim();
+  const amount = parseFloat(document.getElementById('inc-amount').value) || 0;
+  const form   = document.getElementById('inc-form').value;
+  if (!desc || !amount) { alert('Введите описание и сумму'); return; }
+  state.income.push({ id: Date.now(), date, desc, amount, status: 'unsplit', form });
+  save();
+  document.getElementById('inc-desc').value = '';
+  document.getElementById('inc-amount').value = '';
+  document.getElementById('inc-form').value = 'cash';
+  renderAll();
+}
+
+function deleteIncome(id) {
+  // can't delete if in a distribution
+  const inDist = state.distributions.some(d => d.incomeIds.includes(id));
+  if (inDist) { alert('Сначала отмените распределение, в котором участвует эта запись'); return; }
+  state.income = state.income.filter(i => i.id !== id);
+  save(); renderAll();
+}
+
+// ═══ EXPENSES ═══
+function addExpense() {
+  const date   = document.getElementById('exp-date').value || today();
+  const desc   = document.getElementById('exp-desc').value.trim();
+  const amount = parseFloat(document.getElementById('exp-amount').value) || 0;
+  const who    = document.getElementById('exp-who').value;
+  if (!desc || !amount) { alert('Введите описание и сумму'); return; }
+  state.expenses.push({ id: Date.now(), date, desc, amount, who, purpose: 'common' });
+  save();
+  document.getElementById('exp-desc').value = '';
+  document.getElementById('exp-amount').value = '';
+  document.getElementById('exp-who').value = 'pool';
+  renderAll();
+}
+
+function deleteExpense(id) {
+  const inDist = state.distributions.some(d => d.expenseIds.includes(id));
+  if (inDist) { alert('Сначала отмените распределение, в котором участвует эта запись'); return; }
+  state.expenses = state.expenses.filter(e => e.id !== id);
+  save(); renderAll();
+}
+
+// ═══ SETTINGS ═══
+function saveSettings() {
+  state.p1 = document.getElementById('name-p1').value.trim() || 'Руслан';
+  state.p2 = document.getElementById('name-p2').value.trim() || 'Ильнур';
+  save(); renderAll();
+}
+
+function updateNamesDisplay() {}
+
+// ═══ EXPORT / IMPORT ═══
+function exportData() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'legal-cassa-' + today() + '.json'; a.click();
+}
+function importData(event) {
+  const file = event.target.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = e => { try { state = JSON.parse(e.target.result); save(); } catch(err) { alert('Ошибка файла'); } };
+  r.readAsText(file);
+}
+function clearAll() {
+  state.income = []; state.expenses = []; state.distributions = [];
+  save();
+}
+
+// ═══ INIT ═══
+document.getElementById('inc-date').value = today();
+document.getElementById('exp-date').value = today();
+document.getElementById('debt-date').value = today();
+
+// Инициализация пароля
+pwInit();
+
+// Закрытие модалки по Esc
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (document.getElementById('modal2').style.display !== 'none') {
+      closeReviewModal();
+    } else if (document.getElementById('dist-modal').classList.contains('open')) {
+      closeDistModal();
+    }
+  }
+});
+
+// Подписка на Firebase — данные загружаются и рендерятся при любом изменении
+setSyncDot('loading');
+
+let _fbConnected = false;
+
+// ШАГ 1: мгновенно показываем данные из localStorage
+try {
+  const saved = localStorage.getItem('legalcassa_backup');
+  if (saved) {
+    state = JSON.parse(saved);
+    state.income        = toArray(state.income);
+    state.expenses      = toArray(state.expenses);
+    state.distributions = toArray(state.distributions);
+    state.distributions.forEach(d => {
+      d.incomeIds  = toArray(d.incomeIds);
+      d.expenseIds = toArray(d.expenseIds);
+    });
+    load();
+    renderAll();
+  }
+} catch(e) {}
+
+// ШАГ 2: Firebase догоняет в фоне и обновляет если есть свежие данные
+const _fbTimeout = setTimeout(() => {
+  if (!_fbConnected) {
+    console.warn('Firebase недоступен — работаем локально (localStorage)');
+    _useFirebase = false;
+    setSyncDot('ok');
+  }
+}, 3000);
+
+db.ref('kassa').on('value', snap => {
+  clearTimeout(_fbTimeout);
+  _fbConnected = true;
+  _useFirebase = true;
+  const val = snap.val();
+  if (val) {
+    state = val;
+    state.income        = toArray(state.income);
+    state.expenses      = toArray(state.expenses);
+    state.distributions = toArray(state.distributions);
+    state.distributions.forEach(d => {
+      d.incomeIds  = toArray(d.incomeIds);
+      d.expenseIds = toArray(d.expenseIds);
+    });
+  }
+  load();
+  setSyncDot('ok');
+  if (_authenticated) renderAll();
+}, err => {
+  clearTimeout(_fbTimeout);
+  console.error('Firebase read error:', err);
+  _useFirebase = false;
+  setSyncDot('err');
+});
+
+function toArray(val) {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  // Firebase объект с числовыми ключами → массив
+  return Object.values(val);
+}
+</script>
+</body>
+</html>

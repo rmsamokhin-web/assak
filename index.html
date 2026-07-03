@@ -203,6 +203,8 @@
     transition: opacity .2s;
   }
 
+  .modal-overlay { overflow-x: auto; }
+  #modal-debt { width: 380px; }
   .modal h2 { font-size: 15px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
 
   /* section inside modal */
@@ -402,6 +404,7 @@
         <select id="inc-form">
           <option value="cash">Наличка</option>
           <option value="ruslan">На счёт Руслану</option>
+          <option value="ilnur">На счёт Ильнуру</option>
         </select>
       </div>
       <button class="btn" onclick="addIncome()">+ Добавить</button>
@@ -512,26 +515,17 @@
   <div class="modal" id="modal1">
     <h2>⚡ Распределить</h2>
 
-    <!-- Распределение доходов с inline полем общака -->
+    <!-- Сводка текущей ситуации -->
     <div class="ms">
-      <div class="ms-title">Распределение доходов</div>
-      <div class="ms-block" id="dist-shares">
-        <div class="ms-row">
-          <span class="ml">В общак</span>
-          <span class="mv"><input type="number" id="pool-input" placeholder="0" min="0"
-            style="width:110px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 8px;font-family:'JetBrains Mono',monospace;font-size:13px;text-align:right;outline:none"
-            oninput="suggestDistribution()"></span>
-        </div>
-        <div style="display:flex;gap:6px;padding:6px 0 2px;flex-wrap:wrap">
-          <button class="denom-btn" id="denom-0"   onclick="setDenom(0)"    title="Без ограничений">Любая</button>
-          <button class="denom-btn" id="denom-500"  onclick="setDenom(500)"  >×500</button>
-          <button class="denom-btn" id="denom-1000" onclick="setDenom(1000)" >×1000</button>
-          <button class="denom-btn" id="denom-2000" onclick="setDenom(2000)" >×2000</button>
-          <button class="denom-btn" id="denom-5000" onclick="setDenom(5000)" >×5000</button>
-        </div>
-        <div id="pool-hint" style="display:none;padding:6px 0 2px">
-          <button onclick="applyPoolHint()" style="background:rgba(108,140,255,.12);border:1px solid rgba(108,140,255,.35);color:var(--accent);font-size:12px;padding:5px 12px;border-radius:6px;cursor:pointer;font-family:inherit;width:100%;text-align:left;transition:all .15s" id="pool-hint-btn"></button>
-        </div>
+      <div class="ms-title">Текущая ситуация</div>
+      <div class="ms-block" id="dist-situation">
+        <!-- заполняется suggestDistribution() -->
+      </div>
+    </div>
+
+    <!-- Распределение доходов — скрыто, нужно только для JS -->
+    <div style="display:none">
+      <div id="dist-shares">
         <div id="dist-shares-rows"></div>
       </div>
     </div>
@@ -542,10 +536,15 @@
       <div class="ms-block" id="dist-debts"></div>
     </div>
 
-    <!-- Учёт долгов -->
-    <div class="ms" id="dist-accdebt-wrap" style="display:none">
+    <div class="modal-footer">
+    </div>
+  </div>
+  <div class="modal" id="modal-debt" style="display:none">
+    <h2>⚖️ Учёт долгов</h2>
+
+    <div class="ms" id="dist-accdebt-wrap">
       <div class="ms-title" style="display:flex;align-items:center;justify-content:space-between">
-        <span>Учёт долгов</span>
+        <span>Накопленные долги</span>
         <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);cursor:pointer;font-weight:400">
           <input type="checkbox" id="include-manual-debts" checked onchange="suggestDistribution()"
             style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">
@@ -553,10 +552,6 @@
         </label>
       </div>
       <div class="ms-block" id="dist-accdebt"></div>
-    </div>
-
-    <div class="modal-footer">
-      <button class="btn ghost" onclick="closeDistModal()">Отмена</button>
     </div>
   </div>
 
@@ -567,6 +562,29 @@
     <div class="ms">
       <div class="ms-title">Касса</div>
       <div class="ms-block" id="review-cash"></div>
+    </div>
+
+    <!-- Поле В общак + кратность -->
+    <div class="ms">
+      <div class="ms-title">Кратность наличных купюр</div>
+      <div class="ms-block">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+          <button class="denom-btn" id="denom-0"   onclick="setDenom(0)"    title="Без ограничений">Любая</button>
+          <button class="denom-btn" id="denom-500"  onclick="setDenom(500)"  >×500</button>
+          <button class="denom-btn" id="denom-1000" onclick="setDenom(1000)" >×1000</button>
+          <button class="denom-btn" id="denom-2000" onclick="setDenom(2000)" >×2000</button>
+          <button class="denom-btn" id="denom-5000" onclick="setDenom(5000)" >×5000</button>
+        </div>
+        <div class="ms-row">
+          <span class="ml">В общак</span>
+          <span class="mv"><input type="number" id="pool-input" placeholder="0" min="0"
+            style="width:110px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 8px;font-family:'JetBrains Mono',monospace;font-size:13px;text-align:right;outline:none"
+            oninput="suggestDistribution()"></span>
+        </div>
+        <div id="pool-hint" style="display:none;padding:4px 0 0">
+          <button onclick="applyPoolHint()" style="background:rgba(108,140,255,.12);border:1px solid rgba(108,140,255,.35);color:var(--accent);font-size:12px;padding:5px 12px;border-radius:6px;cursor:pointer;font-family:inherit;width:100%;text-align:left;transition:all .15s" id="pool-hint-btn"></button>
+        </div>
+      </div>
     </div>
 
     <div class="ms">
@@ -580,8 +598,8 @@
     </div>
 
     <div class="modal-footer">
-      <button class="btn ghost" onclick="closeReviewModal()">← Назад</button>
-      <button class="apply-btn" onclick="applyFromModal1()">✓ Применить</button>
+      <button class="btn ghost" onclick="closeDistModal()">Отмена</button>
+      <button class="apply-btn" onclick="commitAndClose()">✓ Применить</button>
     </div>
   </div>
 
@@ -1067,11 +1085,12 @@ function getFreeSums() {
 
   const totalUnsplit = unsplitItems.reduce((a,i)=>a+i.amount,0);
   const ruslanAcctTotal = unsplitItems.filter(i=>i.form==='ruslan').reduce((a,i)=>a+i.amount,0);
-  const cashTotal = totalUnsplit - ruslanAcctTotal;
+  const ilnurAcctTotal  = unsplitItems.filter(i=>i.form==='ilnur').reduce((a,i)=>a+i.amount,0);
+  const cashTotal = totalUnsplit - ruslanAcctTotal - ilnurAcctTotal;
   const p1Exp = personalExpItems.filter(e=>e.who==='p1').reduce((a,e)=>a+e.amount,0);
   const p2Exp = personalExpItems.filter(e=>e.who==='p2').reduce((a,e)=>a+e.amount,0);
   const totalExp = p1Exp + p2Exp;
-  return { s, unsplitItems, personalExpItems, totalUnsplit, ruslanAcctTotal, cashTotal, p1Exp, p2Exp, totalExp };
+  return { s, unsplitItems, personalExpItems, totalUnsplit, ruslanAcctTotal, ilnurAcctTotal, cashTotal, p1Exp, p2Exp, totalExp };
 }
 
 function onPoolInput() { suggestDistribution(); }
@@ -1228,7 +1247,50 @@ function getAccumulatedDebt(includeManual) {
 }
 
 function suggestDistribution() {
-  const { totalUnsplit, ruslanAcctTotal, cashTotal, p1Exp, p2Exp } = getFreeSums();
+  const { totalUnsplit, ruslanAcctTotal, ilnurAcctTotal, cashTotal, p1Exp, p2Exp } = getFreeSums();
+
+  // ═══ Блок "Текущая ситуация" ═══
+  const situEl = document.getElementById('dist-situation');
+  if (situEl) {
+    const inclManualEl = document.getElementById('include-manual-debts');
+    const inclManual = inclManualEl ? inclManualEl.checked : true;
+    // Независимые долги каждой стороны (без зачёта) для отображения
+    let p1owes = 0, p2owes = 0;
+    for (const dist of state.distributions) {
+      const r = dist.result;
+      if (!r) continue;
+      if (r.debtTail && r.debtTail > 0.01 && r.debtorName) {
+        const paid = (r.payments||[]).reduce((s,p)=>s+p.amount,0);
+        const rem = Math.max(0, r.debtTail - paid);
+        if (rem > 0.01) { if (r.debtorName === state.p1) p1owes += rem; else p2owes += rem; }
+      }
+      if (r.accountDebt && r.accountDebt > 0 && !r.accountDebtSettled) {
+        const paid = (r.acctPayments||[]).reduce((s,p)=>s+p.amount,0);
+        p1owes += Math.max(0, r.accountDebt - paid);
+      }
+    }
+    if (inclManual) {
+      for (const d of (state.manualDebts||[])) {
+        const paid = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
+        const rem = Math.max(0, d.amount - paid);
+        if (rem > 0.01) { if (d.debtor === 'p1') p1owes += rem; else p2owes += rem; }
+      }
+    }
+    // Долг по текущим расходам ещё не распределённым
+    const curExp = p1Exp + p2Exp;
+    const curExpDebt = Math.abs(p1Exp - p2Exp) / 2;
+    if (curExpDebt > 0.01) {
+      if (p1Exp > p2Exp) p1owes += curExpDebt; else p2owes += curExpDebt;
+    }
+    let sHtml = '<div class="ms-row"><span class="ml">Всего заработано</span><span class="mv green">'+fmt(totalUnsplit)+'</span></div>';
+    sHtml += '<div class="ms-row"><span class="ml" style="padding-left:10px;font-size:12px;color:var(--muted)">из них наличкой в кассе</span><span class="mv" style="font-size:12px">'+fmt(cashTotal)+'</span></div>';
+    if (ruslanAcctTotal > 0) sHtml += '<div class="ms-row"><span class="ml" style="padding-left:10px;font-size:12px;color:var(--muted)">на счёте у '+state.p1+'</span><span class="mv" style="font-size:12px">'+fmt(ruslanAcctTotal)+'</span></div>';
+    if (ilnurAcctTotal > 0) sHtml += '<div class="ms-row"><span class="ml" style="padding-left:10px;font-size:12px;color:var(--muted)">на счёте у '+state.p2+'</span><span class="mv" style="font-size:12px">'+fmt(ilnurAcctTotal)+'</span></div>';
+    if (p2owes > 0.01) sHtml += '<div class="ms-row" style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px"><span class="ml">'+state.p2+' должен '+toDative(state.p1)+'</span><span class="mv yellow">'+fmt(p2owes)+'</span></div>';
+    if (p1owes > 0.01) sHtml += '<div class="ms-row"'+(p2owes < 0.01 ? ' style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px"' : '')+'><span class="ml">'+state.p1+' должен '+toDative(state.p2)+'</span><span class="mv yellow">'+fmt(p1owes)+'</span></div>';
+    if (p1owes < 0.01 && p2owes < 0.01) sHtml += '<div class="ms-row" style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px"><span class="ml" style="color:var(--green)">Долгов нет ✓</span></div>';
+    situEl.innerHTML = sHtml;
+  }
   const poolAmt = parseFloat(document.getElementById('pool-input').value) || 0;
 
   // Шаг 1: считаем максимальные выплаты кратно номиналу
@@ -1309,21 +1371,51 @@ function suggestDistribution() {
 
   } else if (totalDebtSigned < -0.01 && debtKrat >= 1000) {
     // ═══ Ильнур должен Руслану ═══
-    const ilnurGrossRaw = Math.min(p2Income, Math.max(0, cashForPayouts));
+    // Стратегия: максимально зачесть долг через счёт Руслана
+    // (Руслан просто оставляет у себя часть доли Ильнура)
+
+    // Доля каждого от всех поступлений
+    // p1Income = p2Income = totalUnsplit / 2
+
+    // Ильнур уже получил ilnurAcctTotal на счёт — это его частичная доля
+    // Руслан уже получил ruslanAcctTotal на счёт — это его частичная доля
+    // Из налички нужно выплатить оставшиеся доли
+
+    // Сколько Руслан «переполучил» сверх своей доли (отрицательное = недоплатил)
+    const ruslanAcctExcess = ruslanAcctTotal - p1Income; // >0 = переполучил
+
+    // Если Руслан переполучил — эту разницу он должен передать Ильнуру (или зачесть в долг)
+    // Зачёт долга через счёт Руслана: Руслан оставляет у себя min(долг, доля Ильнура) со счёта
+    const ilnurShareFromRuslanAcct = Math.max(0, ruslanAcctTotal - p1Income); // сколько сверх своей доли у Руслана
+    // Руслан может зачесть до debtKrat из доли Ильнура которая у него на счёте
+    const debtFromRuslanAcct = Math.min(debtKrat, Math.floor(ilnurShareFromRuslanAcct / 1000) * 1000);
+
+    // Остаток долга после зачёта со счёта Руслана
+    const debtAfterAcct = totalDebtRaw - debtFromRuslanAcct;
+    const debtAfterAcctKrat = Math.floor(debtAfterAcct / 1000) * 1000;
+
+    // Теперь из налички: Ильнур получает свою наличную долю минус то что уже на его счёте
+    const ilnurCashEntitled = Math.max(0, p2Income - ilnurAcctTotal);
+    const ilnurGrossRaw = Math.min(ilnurCashEntitled, Math.max(0, cashForPayouts));
     const ilnurGross = _denom > 0 ? Math.floor(ilnurGrossRaw / unit) * unit : ilnurGrossRaw;
-    const ilnurPayback = Math.min(debtKrat, ilnurGross);
-    ilnurFromCash = Math.max(0, ilnurGross - ilnurPayback);
-    debtAutoApply = ilnurPayback;
-    debtTailAfterAuto = totalDebtRaw - ilnurPayback;
-    ruslanFromCash = Math.max(0, Math.floor((cashForPayouts - ilnurGrossRaw) / unit) * unit) + ilnurPayback;
-    const ilnurStillNeeded = Math.max(0, p2Income - ilnurGross);
-    if (ruslanAcctTotal > 0) {
-      ilnurFromRuslanFinal = _denom > 0 ? Math.floor(ilnurStillNeeded / acctUnit) * acctUnit : ilnurStillNeeded;
-      cashDebtToIlnur = Math.max(0, ilnurStillNeeded - ilnurFromRuslanFinal);
-    } else {
-      ilnurFromRuslanFinal = 0;
-      cashDebtToIlnur = ilnurStillNeeded;
-    }
+
+    // Из наличной доли Ильнура — погашение остатка долга наличкой
+    const ilnurPaybackCash = Math.min(debtAfterAcctKrat, ilnurGross);
+    ilnurFromCash = Math.max(0, ilnurGross - ilnurPaybackCash);
+    debtAutoApply = debtFromRuslanAcct + ilnurPaybackCash;
+    debtTailAfterAuto = totalDebtRaw - debtAutoApply;
+
+    // Руслан забирает наличкой свою наличную долю
+    // (его часть наличных = cashForPayouts - то что идёт Ильнуру наличкой + возврат долга наличкой)
+    ruslanFromCash = Math.max(0, Math.floor((cashForPayouts - ilnurGrossRaw) / unit) * unit) + ilnurPaybackCash;
+
+    // Руслан передаёт Ильнуру со счёта: то что сверх своей доли минус зачтённый долг
+    const ruslanToIlnurRaw = Math.max(0, ilnurShareFromRuslanAcct - debtFromRuslanAcct);
+    // + недоплаченная доля Ильнура наличкой (если наличка кончилась)
+    const ilnurStillNeeded = Math.max(0, p2Income - ilnurGross - ilnurAcctTotal - debtFromRuslanAcct);
+    const totalRuslanToIlnur = ruslanToIlnurRaw + ilnurStillNeeded;
+    ilnurFromRuslanFinal = _denom > 0 ? Math.floor(totalRuslanToIlnur / acctUnit) * acctUnit : totalRuslanToIlnur;
+    cashDebtToIlnur = Math.max(0, totalRuslanToIlnur - ilnurFromRuslanFinal);
 
   } else {
     // ═══ Нет долга или меньше 1000 ═══
@@ -1352,7 +1444,7 @@ function suggestDistribution() {
     debtRaw: totalDebtRaw, debtKrat, debtorName, creditorName,
     totalDebtSigned,
     debtAutoApply, debtTailAfterAuto,
-    ruslanAcctTotal, cashTotal,
+    ruslanAcctTotal, ilnurAcctTotal, cashTotal,
     ilnurFromCash, ruslanFromCash,
     ilnurFromRuslan: ilnurFromRuslanFinal, cashDebtToIlnur
   };
@@ -1368,33 +1460,22 @@ function suggestDistribution() {
     <div class="ms-row">
       <span class="ml">${state.p2}</span>
       <span class="mv p2c">+${fmt(p2Income)}</span>
-    </div>
-    ${incTail > 0 ? `<div class="ms-row">
-      <span class="ml" style="color:var(--yellow);font-size:12px">+ в общак (некратный остаток)</span>
-      <span class="mv yellow">${fmt(incTail)}</span>
-    </div>` : ''}
-    ${ruslanAcctTotal > 0 ? `
-    <div class="ms-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px">
-      <span class="ml" style="font-size:11px;color:var(--muted)">На счёте Руслана</span>
-      <span class="mv" style="color:var(--p2)">${fmt(ruslanAcctTotal)}</span>
-    </div>
-    <div class="ms-row">
+    </div>` +
+    (incTail > 0 ? '' : '') +
+    (ruslanAcctTotal > 0 ? '<div class="ms-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px"><span class="ml" style="font-size:11px;color:var(--muted)">На счёте '+state.p1+'</span><span class="mv" style="color:var(--p2)">'+fmt(ruslanAcctTotal)+'</span></div>' : '') +
+    (ilnurAcctTotal > 0 ? '<div class="ms-row"><span class="ml" style="font-size:11px;color:var(--muted)">На счёте '+state.p2+'</span><span class="mv" style="color:var(--p2)">'+fmt(ilnurAcctTotal)+'</span></div>' : '') +
+    `<div class="ms-row">
       <span class="ml" style="font-size:12px">${state.p1} забирает наличкой</span>
       <span class="mv p1c">${fmt(ruslanFromCash)}</span>
     </div>
     <div class="ms-row">
       <span class="ml" style="font-size:12px">${state.p2} забирает наличкой</span>
       <span class="mv p2c">${fmt(ilnurFromCash)}</span>
-    </div>
-    ${ ilnurFromRuslanFinal > 0 ? '<div class="ms-row"><span class="ml" style="font-size:12px;color:var(--yellow)">'+state.p1+' должен '+toDative(state.p2)+' со счёта</span><span class="mv yellow">'+fmt(ilnurFromRuslanFinal)+'</span></div>' : ''}
-    ${ilnurFromRuslanFinal > 0 && debtAutoApply > 0 ? '<div class="ms-row"><span class="ml" style="font-size:11px;color:var(--muted);padding-left:10px">в т.ч. погашение долга</span><span class="mv" style="color:var(--muted);font-size:11px">'+fmt(debtAutoApply)+'</span></div>' : ''}
-    ${cashDebtToIlnur > 0 ? '<div class="ms-row"><span class="ml" style="font-size:12px;color:var(--red)">'+state.p1+' должен '+toDative(state.p2)+' (остаток, на следующий период)</span><span class="mv red">'+fmt(cashDebtToIlnur)+'</span></div>' : ''}
-    <div class="ms-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px">
-      <span class="ml" style="font-size:12px;color:var(--muted)">Итого в общак</span>
-      <span class="mv">${fmt(totalPoolAmt)}</span>
-    </div>
-    ` : ''}
-  `;
+    </div>` +
+    (ilnurFromRuslanFinal > 0 ? '<div class="ms-row"><span class="ml" style="font-size:12px;color:var(--yellow)">'+state.p1+' должен '+toDative(state.p2)+' со счёта</span><span class="mv yellow">'+fmt(ilnurFromRuslanFinal)+'</span></div>' : '') +
+    (ilnurFromRuslanFinal > 0 && debtAutoApply > 0 ? '<div class="ms-row"><span class="ml" style="font-size:11px;color:var(--muted);padding-left:10px">в т.ч. погашение долга</span><span class="mv" style="color:var(--muted);font-size:11px">'+fmt(debtAutoApply)+'</span></div>' : '') +
+    (cashDebtToIlnur > 0 ? '<div class="ms-row"><span class="ml" style="font-size:12px;color:var(--red)">'+state.p1+' должен '+toDative(state.p2)+' (остаток)</span><span class="mv red">'+fmt(cashDebtToIlnur)+'</span></div>' : '') +
+    '<div class="ms-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px"><span class="ml" style="font-size:12px;color:var(--muted)">Итого в общак</span><span class="mv">'+fmt(totalPoolAmt)+'</span></div>';
   document.getElementById('dist-debts-wrap').style.display = 'block';
 
   // Рендер "Зачёт расходов"
@@ -1703,6 +1784,7 @@ function _commitDistribution(p1Share, p2Share, _poolAmtParam, withDebtAdj) {
       cashDebt: 0,  // поглощён в debtTail
       cashTotal: _draft.cashTotal || 0,
       ruslanAcctTotal: _draft.ruslanAcctTotal || 0,
+      ilnurAcctTotal: _draft.ilnurAcctTotal || 0,
       currentDebtRaw: _draft.currentDebtRaw || 0,
       currentDebtorName: _draft.currentDebtorName || null,
       currentCreditorName: _draft.currentCreditorName || null,
@@ -1866,9 +1948,22 @@ function confirmUndoDistribution(distId) {
 
 function applyFromModal1() {
   if (!_draft) return;
-  _commitDistribution(_draft.p1Income, _draft.p2Income, _draft.totalPoolAmt, false);
+  // Это вызывается из modal-debt при нажатии "Далее →" — показываем итог
+  renderReviewModal();
+  document.getElementById('modal-debt').style.display = 'none';
+  document.getElementById('modal2').style.display = 'block';
 }
 
+
+function goBackToDebtModal() {
+  document.getElementById('modal2').style.display = 'none';
+  document.getElementById('modal-debt').style.display = 'block';
+}
+
+function commitAndClose() {
+  if (!_draft) return;
+  _commitDistribution(_draft.p1Income, _draft.p2Income, _draft.totalPoolAmt, false);
+}
 
 function openModal2() { openReviewModal(); }
 function closeModal2() { closeReviewModal(); }
@@ -1883,11 +1978,17 @@ function renderReviewModal() {
   if (d.ruslanAcctTotal > 0) {
     cashHtml += `<div class="ms-row"><span class="ml">На счёте ${state.p1}</span><span class="mv" style="color:var(--p2)">${fmt(d.ruslanAcctTotal)}</span></div>`;
   }
+  if (d.ilnurAcctTotal > 0) {
+    cashHtml += `<div class="ms-row"><span class="ml">На счёте ${state.p2}</span><span class="mv" style="color:var(--p2)">${fmt(d.ilnurAcctTotal)}</span></div>`;
+  }
   document.getElementById('review-cash').innerHTML = cashHtml;
 
   // Выплаты
   let payHtml = '';
   payHtml += `<div class="ms-row"><span class="ml">Положить в общак</span><span class="mv">${fmt(d.totalPoolAmt)}</span></div>`;
+  if (d.incTail > 0) {
+    payHtml += `<div class="ms-row"><span class="ml" style="font-size:11px;color:var(--muted);padding-left:10px">в т.ч. некратный остаток</span><span class="mv" style="font-size:11px;color:var(--muted)">${fmt(d.incTail)}</span></div>`;
+  }
   payHtml += `<div class="ms-row"><span class="ml">${state.p1} забирает наличкой</span><span class="mv p1c">${fmt(d.ruslanFromCash || 0)}</span></div>`;
   payHtml += `<div class="ms-row"><span class="ml">${state.p2} забирает наличкой</span><span class="mv p2c">${fmt(d.ilnurFromCash || 0)}</span></div>`;
   if (d.ilnurFromRuslan > 0) {
@@ -1935,27 +2036,30 @@ let _redistExpIds = null;
 function openDistModal() {
   _draft = null;
   const ab1b = document.getElementById('apply-btn1'); if (ab1b) ab1b.style.display = 'none';
-  const poolInput = document.getElementById('pool-input');
-  if (poolInput) { poolInput.value = ''; poolInput.style.borderColor = ''; }
   const sharesRows = document.getElementById('dist-shares-rows');
   if (sharesRows) sharesRows.innerHTML = '';
   const debtsWrap = document.getElementById('dist-debts-wrap');
   if (debtsWrap) debtsWrap.style.display = 'none';
-  const accDebtWrap = document.getElementById('dist-accdebt-wrap');
-  if (accDebtWrap) accDebtWrap.style.display = 'none';
-  const hintEl = document.getElementById('pool-hint');
-  if (hintEl) hintEl.style.display = 'none';
-    _denom = 1000;
+  _denom = 1000;
   document.querySelectorAll('.denom-btn').forEach(b => b.classList.remove('active'));
   const d0 = document.getElementById('denom-1000');
   if (d0) d0.classList.add('active');
-  document.getElementById('dist-modal').classList.add('open');
+  // Показываем все три модалки сразу
+  document.getElementById('modal1').style.display = 'block';
+  document.getElementById('modal-debt').style.display = 'block';
   document.getElementById('modal2').style.display = 'block';
+  document.getElementById('dist-modal').classList.add('open');
   suggestDistribution();
 }
 
+function goToDebtModal() { /* не используется при одновременном показе */ }
+function goBackToModal1() { /* не используется */ }
+function goBackToDebtModal() { /* не используется */ }
+
 function closeDistModal() {
   document.getElementById('dist-modal').classList.remove('open');
+  document.getElementById('modal1').style.display = 'block';
+  document.getElementById('modal-debt').style.display = 'none';
   document.getElementById('modal2').style.display = 'none';
   document.getElementById('modal1').classList.remove('dimmed');
   _draft = null;
@@ -2224,7 +2328,9 @@ function renderFreeRow(row) {
         ? '<span class="tag pooled">→ В общаке</span>'
         : '<span class="tag" style="color:var(--yellow);border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.08)">⏳ Свободный</span>';
     const formTag = row.form === 'ruslan'
-      ? '<span class="type-badge" style="background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.3);color:var(--p2);font-size:9px">₽ Руслан</span>'
+      ? '<span class="type-badge" style="background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.3);color:var(--p2);font-size:9px">₽ '+state.p1+'</span>'
+      : row.form === 'ilnur'
+      ? '<span class="type-badge" style="background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.3);color:var(--p2);font-size:9px">₽ '+state.p2+'</span>'
       : '';
     return `<tr data-id="${row.id}" data-kind="income">
       <td class="mono muted-date">${row.date}</td>
@@ -2288,6 +2394,7 @@ function startEdit(id, kind) {
         <select class="edit-input" id="ei-form" style="width:120px;padding:3px 6px">
           <option value="cash" ${(item.form||'cash')==='cash'?'selected':''}>Наличка</option>
           <option value="ruslan" ${item.form==='ruslan'?'selected':''}>На счёт Руслану</option>
+          <option value="ilnur" ${item.form==='ilnur'?'selected':''}>На счёт Ильнуру</option>
         </select>
       </td>
       <td><input class="edit-input num" type="number" id="ei-amount" value="${item.amount}" min="0"></td>
@@ -2442,6 +2549,7 @@ function renderGroup(dist, incItems, expItems) {
       resultDesc += '<div>Распределено доходов: <b style="color:var(--green)">'+fmt(totalIncomeDist)+'</b>'+
         (cashPart>0 ? ', из них наличкой <b style="color:var(--text)">'+fmt(cashPart)+'</b>' : '')+
         (acctPart>0 ? ', поступило на счёт '+state.p1+' <b style="color:var(--text)">'+fmt(acctPart)+'</b>' : '')+
+        ((r.ilnurAcctTotal||0)>0 ? ', поступило на счёт '+state.p2+' <b style="color:var(--text)">'+fmt(r.ilnurAcctTotal)+'</b>' : '')+
         '</div>';
 
       // Строка 2: расходы
@@ -2611,8 +2719,8 @@ pwInit();
 // Закрытие модалки по Esc
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    if (document.getElementById('modal2').style.display !== 'none') {
-      closeReviewModal();
+    if (document.getElementById('pay-modal').classList.contains('open')) {
+      closePayModal();
     } else if (document.getElementById('dist-modal').classList.contains('open')) {
       closeDistModal();
     }

@@ -376,6 +376,7 @@
   </div>
 
   <!-- JOURNAL -->
+  <div id="journal-main-wrap">
   <div class="section">
     <div class="journal-head">
       <span class="journal-title">📋 Журнал операций</span>
@@ -391,6 +392,23 @@
     <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">
       <button class="btn green-btn sm" onclick="openDistModal()">⚡ Распределить</button>
     </div>
+  </div>
+  </div>
+
+  <!-- POOL JOURNAL -->
+  <div id="journal-pool-wrap" style="display:none">
+  <div class="section">
+    <div class="journal-head">
+      <span class="journal-title">🏦 Журнал общака</span>
+      <span style="font-size:11px;color:var(--muted);cursor:pointer" onclick="switchToMainJournal()">← вернуться к операциям</span>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Дата</th><th>Тип</th><th>Сумма</th><th>Описание</th><th>Баланс</th>
+      </tr></thead>
+      <tbody id="pool-journal-tbody"></tbody>
+    </table>
+  </div>
   </div>
 
   <div class="section">
@@ -1276,12 +1294,6 @@ function suggestDistribution() {
         if (rem > 0.01) { if (d.debtor === 'p1') p1owes += rem; else p2owes += rem; }
       }
     }
-    // Долг по текущим расходам ещё не распределённым
-    const curExp = p1Exp + p2Exp;
-    const curExpDebt = Math.abs(p1Exp - p2Exp) / 2;
-    if (curExpDebt > 0.01) {
-      if (p1Exp > p2Exp) p1owes += curExpDebt; else p2owes += curExpDebt;
-    }
     let sHtml = '<div class="ms-row"><span class="ml">Всего заработано</span><span class="mv green">'+fmt(totalUnsplit)+'</span></div>';
     sHtml += '<div class="ms-row"><span class="ml" style="padding-left:10px;font-size:12px;color:var(--muted)">из них наличкой в кассе</span><span class="mv" style="font-size:12px">'+fmt(cashTotal)+'</span></div>';
     if (ruslanAcctTotal > 0) sHtml += '<div class="ms-row"><span class="ml" style="padding-left:10px;font-size:12px;color:var(--muted)">на счёте у '+state.p1+'</span><span class="mv" style="font-size:12px">'+fmt(ruslanAcctTotal)+'</span></div>';
@@ -1585,8 +1597,8 @@ function suggestDistribution() {
     // Учтено при распределении наличными/со счёта — перед "Итог"
     if (debtAutoApply > 0) {
       const accountLabel = ruslanAcctTotal > 0
-        ? '✓ Учтено при передаче со счёта'
-        : '✓ Учтено при распределении наличными';
+        ? '✓ Учтено при распределении выплат'
+        : '✓ Учтено при распределении выплат';
       accDebtHtml += `
         <div class="ms-row" style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px">
           <span class="ml" style="color:var(--green);font-size:12px">${accountLabel}</span>
@@ -2128,7 +2140,7 @@ function syncSettingsNames() {
 
 function renderCards(s) {
   const html = `
-    <div class="card">
+    <div class="card" style="cursor:pointer" onclick="switchToMainJournal()" title="Нажмите для возврата к журналу операций">
       <div class="lbl">Всего доходов</div>
       <div class="val green">${fmt(s.totalInc)}</div>
       <div class="sub">${state.income.length} записей</div>
@@ -2143,7 +2155,7 @@ function renderCards(s) {
       <div class="val cp1">${fmt(s.splitInc)}</div>
       <div class="sub">по ${fmt(s.eachSplit)} каждому</div>
     </div>
-    <div class="card">
+    <div class="card" style="cursor:pointer" onclick="switchToPoolJournal()" title="Нажмите для просмотра журнала общака">
       <div class="lbl">Общак — баланс</div>
       <div class="val ${s.poolBalance>=0?'green':'red'}">${fmt(s.poolBalance)}</div>
       <div class="sub">+${fmt(s.pooledInc)} −${fmt(s.poolExp)}</div>
@@ -2158,6 +2170,78 @@ function renderCards(s) {
   if (mainEl) mainEl.innerHTML = html;
   const anEl = document.getElementById('analytics-cards');
   if (anEl) anEl.innerHTML = html;
+}
+
+function switchToPoolJournal() {
+  document.getElementById('journal-main-wrap').style.display = 'none';
+  document.getElementById('journal-pool-wrap').style.display = 'block';
+  renderPoolJournal();
+}
+
+function switchToMainJournal() {
+  document.getElementById('journal-pool-wrap').style.display = 'none';
+  document.getElementById('journal-main-wrap').style.display = 'block';
+}
+
+function renderPoolJournal() {
+  const tbody = document.getElementById('pool-journal-tbody');
+  if (!tbody) return;
+
+  // Собираем все операции общака
+  const rows = [];
+
+  // Поступления из распределений
+  for (const dist of state.distributions) {
+    if (dist.result && dist.result.poolAmt > 0) {
+      const d = dist.ts.slice(0, 10);
+      rows.push({ date: d, type: 'in', amount: dist.result.poolAmt, desc: 'Распределение доходов', ts: dist.ts });
+    }
+  }
+
+  // Доходы со статусом pooled
+  for (const i of state.income) {
+    if (i.status === 'pooled') {
+      rows.push({ date: i.date, type: 'in', amount: i.amount, desc: i.desc || '—', ts: i.date });
+    }
+  }
+
+  // Расходы из общака
+  for (const e of state.expenses) {
+    if (e.who === 'pool') {
+      rows.push({ date: e.date, type: 'out', amount: e.amount, desc: e.desc || '—', ts: e.date });
+    }
+  }
+
+  // Сортировка по дате
+  rows.sort((a, b) => a.ts > b.ts ? 1 : -1);
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">Операций с общаком пока нет</td></tr>';
+    return;
+  }
+
+  let balance = 0;
+  let html = '';
+  for (const row of rows) {
+    if (row.type === 'in') balance += row.amount;
+    else balance -= row.amount;
+
+    const typeTag = row.type === 'in'
+      ? '<span class="type-badge income-badge">↑ Приход</span>'
+      : '<span class="type-badge exp-badge">↓ Расход</span>';
+    const amtColor = row.type === 'in' ? 'var(--green)' : 'var(--red)';
+    const amtSign = row.type === 'in' ? '+' : '−';
+    const balColor = balance >= 0 ? 'var(--green)' : 'var(--red)';
+
+    html += `<tr>
+      <td class="mono muted-date">${row.date}</td>
+      <td>${typeTag}</td>
+      <td class="mono" style="color:${amtColor}">${amtSign}${fmt(row.amount)}</td>
+      <td>${row.desc}</td>
+      <td class="mono" style="color:${balColor};font-weight:700">${fmt(balance)}</td>
+    </tr>`;
+  }
+  tbody.innerHTML = html;
 }
 
 function renderPersons(s) {
@@ -2254,7 +2338,7 @@ function renderJournal() {
 
   // free (undistributed) entries — показываются только в последней (текущей) вкладке
   const freeInc = isLastMonth ? state.income.filter(i => !distIncIds.has(i.id)) : [];
-  const freeExp = isLastMonth ? state.expenses.filter(e => !distExpIds.has(e.id)) : [];
+  const freeExp = isLastMonth ? state.expenses.filter(e => !distExpIds.has(e.id) && e.who !== 'pool') : [];
 
   const freeRows = [
     ...freeInc.map(i => ({ ...i, kind: 'income' })),
@@ -2270,7 +2354,7 @@ function renderJournal() {
     .sort((a,b) => b.id - a.id);
   for (const dist of sortedDists) {
     const incItems = state.income.filter(i => dist.incomeIds.includes(i.id));
-    const expItems = state.expenses.filter(e => dist.expenseIds.includes(e.id));
+    const expItems = state.expenses.filter(e => dist.expenseIds.includes(e.id) && e.who !== 'pool');
     rows.push({ type: 'group', dist, incItems, expItems });
   }
 

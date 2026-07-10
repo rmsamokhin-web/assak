@@ -1303,7 +1303,8 @@ function suggestDistribution() {
     if (p1owes < 0.01 && p2owes < 0.01) sHtml += '<div class="ms-row" style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px"><span class="ml" style="color:var(--green)">Долгов нет ✓</span></div>';
     situEl.innerHTML = sHtml;
   }
-  const poolAmt = parseFloat(document.getElementById('pool-input').value) || 0;
+  const poolInput = document.getElementById('pool-input');
+  const poolAmt = poolInput ? (parseFloat(poolInput.value) || 0) : 0;
 
   // Шаг 1: считаем максимальные выплаты кратно номиналу
   // Некратный остаток уходит в общак автоматически
@@ -1461,10 +1462,13 @@ function suggestDistribution() {
     ilnurFromRuslan: ilnurFromRuslanFinal, cashDebtToIlnur
   };
 
-  document.getElementById('pool-input').style.borderColor = incTail > 0 ? 'var(--yellow)' : '';
-  document.getElementById('pool-input').title = incTail > 0 ? `${fmt(poolAmt)} введено + ${fmt(incTail)} остаток = ${fmt(totalPoolAmt)}` : '';
+  if (poolInput) {
+    poolInput.style.borderColor = incTail > 0 ? 'var(--yellow)' : '';
+    poolInput.title = incTail > 0 ? `${fmt(poolAmt)} введено + ${fmt(incTail)} остаток = ${fmt(totalPoolAmt)}` : '';
+  }
 
-  document.getElementById('dist-shares-rows').innerHTML = `
+  const sharesRowsEl = document.getElementById('dist-shares-rows');
+  if (sharesRowsEl) sharesRowsEl.innerHTML = `
     <div class="ms-row">
       <span class="ml">${state.p1}</span>
       <span class="mv p1c">+${fmt(p1Income)}</span>
@@ -1488,7 +1492,7 @@ function suggestDistribution() {
     (ilnurFromRuslanFinal > 0 && debtAutoApply > 0 ? '<div class="ms-row"><span class="ml" style="font-size:11px;color:var(--muted);padding-left:10px">в т.ч. погашение долга</span><span class="mv" style="color:var(--muted);font-size:11px">'+fmt(debtAutoApply)+'</span></div>' : '') +
     (cashDebtToIlnur > 0 ? '<div class="ms-row"><span class="ml" style="font-size:12px;color:var(--red)">'+state.p1+' должен '+toDative(state.p2)+' (остаток)</span><span class="mv red">'+fmt(cashDebtToIlnur)+'</span></div>' : '') +
     '<div class="ms-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px"><span class="ml" style="font-size:12px;color:var(--muted)">Итого в общак</span><span class="mv">'+fmt(totalPoolAmt)+'</span></div>';
-  document.getElementById('dist-debts-wrap').style.display = 'block';
+  const debtsWrapEl = document.getElementById('dist-debts-wrap'); if (debtsWrapEl) debtsWrapEl.style.display = 'block';
 
   // Рендер "Зачёт расходов"
   let debtsHtml = `
@@ -1515,7 +1519,7 @@ function suggestDistribution() {
     debtsHtml += `<div class="ms-row"><span class="ml">Текущие расходы в паритете</span><span class="mv green">✓</span></div>`;
   }
 
-  document.getElementById('dist-debts').innerHTML = debtsHtml;
+  const debtsEl = document.getElementById('dist-debts'); if (debtsEl) debtsEl.innerHTML = debtsHtml;
 
   // ═══ Блок "Учёт долгов" ═══
   let accDebtHtml = '';

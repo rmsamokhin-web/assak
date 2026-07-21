@@ -418,6 +418,13 @@
       <div class="field"><label>Сумма ₽</label><input type="number" id="inc-amount" placeholder="0" min="0"></div>
       <div class="field"><label>Описание / клиент</label><input type="text" id="inc-desc" placeholder=""></div>
       <div class="field">
+        <label>Категория</label>
+        <select id="inc-category">
+          <option value="fl">ФЛ</option>
+          <option value="ul">ЮЛ</option>
+        </select>
+      </div>
+      <div class="field">
         <label>Форма</label>
         <select id="inc-form">
           <option value="cash">Наличка</option>
@@ -566,7 +573,7 @@
         <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);cursor:pointer;font-weight:400">
           <input type="checkbox" id="include-manual-debts" checked onchange="suggestDistribution()"
             style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">
-          учитывать ручные долги
+          погасить задолженность при распределении
         </label>
       </div>
       <div class="ms-block" id="dist-accdebt"></div>
@@ -904,16 +911,17 @@ function renderAnalytics() {
   const s = calc();
   renderCards(s);
 
-  // Группируем доходы и расходы по месяцам (по дате записи)
-  const monthData = {}; // 'YYYY-MM' -> { inc, exp }
+  // Группируем по месяцам с разбивкой ФЛ/ЮЛ
+  const monthData = {};
   for (const i of state.income) {
     const mk = monthKey(i.date);
-    if (!monthData[mk]) monthData[mk] = { inc: 0, exp: 0 };
-    monthData[mk].inc += i.amount;
+    if (!monthData[mk]) monthData[mk] = { fl: 0, ul: 0, exp: 0 };
+    if (i.category === 'ul') monthData[mk].ul += i.amount;
+    else monthData[mk].fl += i.amount;
   }
   for (const e of state.expenses) {
     const mk = monthKey(e.date);
-    if (!monthData[mk]) monthData[mk] = { inc: 0, exp: 0 };
+    if (!monthData[mk]) monthData[mk] = { fl: 0, ul: 0, exp: 0 };
     monthData[mk].exp += e.amount;
   }
 
@@ -926,62 +934,119 @@ function renderAnalytics() {
     return;
   }
 
-  const maxVal = Math.max(...keys.map(k => monthData[k].inc), 1);
-  const barW = 56, gap = 36, chartH = 220, leftPad = 16, topPad = 24;
-  const chartW = keys.length * (barW + gap) + leftPad*2;
+  // Красивый график: сетка, оси, скруглённые углы, два столбика рядом на месяц
+  const maxVal = Math.max(...keys.map(k => monthData[k].fl + monthData[k].ul), 1);
+  const BAR = 44, GAP = 6, GRP = 40, CH = 200, PAD_L = 48, PAD_T = 24, PAD_B = 36;
+  const STROKE = 'rgba(150,150,150,0.18)';
+  const nw = keys.length * (BAR*2 + GAP + GRP) + PAD_L + 20;
+  const nh = CH + PAD_T + PAD_B;
 
-  let svg = '<svg viewBox="0 0 '+chartW+' '+(chartH+topPad+40)+'" style="width:100%;max-width:'+chartW+'px;height:auto" xmlns="http://www.w3.org/2000/svg">';
-  svg += '<defs><pattern id="expHatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">'+
-    '<rect width="6" height="6" fill="#f87171" fill-opacity=".25"/>'+
-    '<line x1="0" y1="0" x2="0" y2="6" stroke="#f87171" stroke-width="2"/>'+
-    '</pattern></defs>';
+  // Gridlines
+  const gridSteps = [0, 0.25, 0.5, 0.75, 1];
+  let svg = '<svg viewBox="0 0 '+nw+' '+nh+'" style="width:100%;max-width:'+Math.max(nw,320)+'px;height:auto;display:block" xmlns="http://www.w3.org/2000/svg">';
+
+  // Горизонтальные линии сетки
+  gridSteps.forEach(t => {
+    const y = PAD_T + CH * (1 - t);
+    const label = Math.round(maxVal * t / 1000) + 'k';
+    svg += '<line x1="'+PAD_L+'" y1="'+y+'" x2="'+(nw-10)+'" y2="'+y+'" stroke="'+STROKE+'" stroke-width="1"/>';
+    svg += '<text x="'+(PAD_L-8)+'" y="'+(y+4)+'" text-anchor="end" font-size="10" fill="#888780" font-family="Inter,system-ui,sans-serif">'+label+'</text>';
+  });
+
+  // Ось Y
+  svg += '<line x1="'+PAD_L+'" y1="'+PAD_T+'" x2="'+PAD_L+'" y2="'+(PAD_T+CH)+'" stroke="'+STROKE+'" stroke-width="1"/>';
+
+  const R = 4; // border-radius столбиков
+
+  function roundedTop(x, y, w, h, r) {
+    if (h <= 0) return '';
+    if (h < r) r = h;
+    return '<path d="M'+(x+r)+','+y+' h'+(w-2*r)+' q'+r+',0 '+r+','+r+' v'+(h-r)+' h-'+w+' v-'+(h-r)+' q0,-'+r+' '+r+',-'+r+'z" fill="inherit"/>';
+  }
 
   keys.forEach((mk, idx) => {
     const d = monthData[mk];
-    const x = leftPad + idx * (barW + gap);
-    const incH = (d.inc / maxVal) * chartH;
-    const expH = Math.min(incH, (d.exp / maxVal) * chartH);
-    const incY = topPad + chartH - incH;
-    const [y, m] = mk.split('-');
-    const label = MONTH_NAMES_RU[parseInt(m,10)-1].slice(0,3) + ' ' + y.slice(2);
+    const xBase = PAD_L + idx * (BAR*2 + GAP + GRP);
+    const xL = xBase;
+    const xR = xBase + BAR + GAP;
+    const [yr, mo] = mk.split('-');
+    const label = MONTH_NAMES_RU[parseInt(mo,10)-1].slice(0,3) + '\u2019' + yr.slice(2);
+    const total = d.fl + d.ul;
+    const baseY = PAD_T + CH;
 
-    // Income bar (base)
-    svg += '<rect x="'+x+'" y="'+incY+'" width="'+barW+'" height="'+incH+'" rx="4" fill="#34d399"><title>Доход: '+fmt(d.inc)+'</title></rect>';
+    // === ЛЕВЫЙ: ФЛ + ЮЛ стековый ===
+    const totalH = Math.max((total / maxVal) * CH, 0);
+    const ulH = total > 0 ? (d.ul / total) * totalH : 0;
+    const flH = totalH - ulH;
 
-    // Expense overlay (diagonal hatch), anchored to bottom of income bar
-    if (d.exp > 0) {
-      const expY = topPad + chartH - expH;
-      svg += '<rect x="'+x+'" y="'+expY+'" width="'+barW+'" height="'+expH+'" rx="4" fill="url(#expHatch)" stroke="#f87171" stroke-width="1.5"><title>Расход: '+fmt(d.exp)+'</title></rect>';
+    // ЮЛ снизу — фиолетовый, скруглён только если ФЛ нет
+    if (ulH > 0) {
+      const needsTop = flH <= 0;
+      if (needsTop) {
+        svg += '<g fill="#4a3aa7">'+roundedTop(xL, baseY-totalH, BAR, ulH, R)+'</g>';
+      } else {
+        svg += '<rect x="'+xL+'" y="'+(baseY-ulH)+'" width="'+BAR+'" height="'+ulH+'" fill="#4a3aa7"/>';
+      }
+      if (ulH > 15) svg += '<text x="'+(xL+BAR/2)+'" y="'+(baseY-ulH/2+4)+'" text-anchor="middle" font-size="10" font-weight="500" fill="#e9d5ff" font-family="Inter,sans-serif">'+fmtChart(d.ul)+'</text>';
+    }
+    // ФЛ сверху — синий, скруглён сверху
+    if (flH > 0) {
+      svg += '<g fill="#2563eb">'+roundedTop(xL, baseY-totalH, BAR, flH, R)+'</g>';
+      if (flH > 15) svg += '<text x="'+(xL+BAR/2)+'" y="'+(baseY-totalH+flH/2+4)+'" text-anchor="middle" font-size="10" font-weight="500" fill="#dbeafe" font-family="Inter,sans-serif">'+fmtChart(d.fl)+'</text>';
+    }
+    // Разделитель ФЛ/ЮЛ
+    if (flH > 0 && ulH > 0) svg += '<rect x="'+xL+'" y="'+(baseY-ulH-1)+'" width="'+BAR+'" height="1.5" fill="rgba(255,255,255,0.2)"/>';
+
+    // === ПРАВЫЙ: доход(зелёный) + расход(красный снизу) ===
+    const incH = totalH;
+    const expH2 = Math.min((d.exp / maxVal) * CH, incH);
+    const greenH = incH - expH2;
+
+    if (incH > 0) {
+      // Зелёный (верхняя часть)
+      if (greenH > 0) {
+        svg += '<g fill="#15803d">'+roundedTop(xR, baseY-incH, BAR, greenH, R)+'</g>';
+        if (greenH > 15) svg += '<text x="'+(xR+BAR/2)+'" y="'+(baseY-incH+greenH/2+4)+'" text-anchor="middle" font-size="10" font-weight="500" fill="#dcfce7" font-family="Inter,sans-serif">'+fmtChart(total-d.exp)+'</text>';
+      }
+      // Красный снизу (расход)
+      if (expH2 > 0) {
+        const needsTopR = greenH <= 0;
+        if (needsTopR) {
+          svg += '<g fill="#dc2626">'+roundedTop(xR, baseY-expH2, BAR, expH2, R)+'</g>';
+        } else {
+          svg += '<rect x="'+xR+'" y="'+(baseY-expH2)+'" width="'+BAR+'" height="'+expH2+'" fill="#dc2626"/>';
+        }
+        if (expH2 > 15) svg += '<text x="'+(xR+BAR/2)+'" y="'+(baseY-expH2/2+4)+'" text-anchor="middle" font-size="10" font-weight="500" fill="#fee2e2" font-family="Inter,sans-serif">'+fmtChart(d.exp)+'</text>';
+      }
+      // Разделитель
+      if (greenH > 0 && expH2 > 0) svg += '<rect x="'+xR+'" y="'+(baseY-expH2-1)+'" width="'+BAR+'" height="1.5" fill="rgba(255,255,255,0.2)"/>';
     }
 
-    // Income value — above bar in black on light bg... per spec inside bar, black
-    if (d.inc > 0) {
-      svg += '<text x="'+(x+barW/2)+'" y="'+(incY+16)+'" text-anchor="middle" font-size="13" font-weight="900" fill="#0a0e1a" font-family="JetBrains Mono,monospace">'+fmtChart(d.inc)+'</text>';
-    }
-    // Expense value inside hatched zone, near top of expense zone (like income)
-    if (d.exp > 0) {
-      const expY = topPad + chartH - expH;
-      svg += '<text x="'+(x+barW/2)+'" y="'+(expY+16)+'" text-anchor="middle" font-size="11" font-weight="900" fill="#0a0e1a" font-family="JetBrains Mono,monospace">'+fmtChart(d.exp)+'</text>';
-    }
+    // Сумма над столбиком
+    if (totalH > 0) svg += '<text x="'+(xBase+BAR+GAP/2)+'" y="'+(baseY-totalH-8)+'" text-anchor="middle" font-size="11" font-weight="500" fill="#888780" font-family="Inter,sans-serif">'+fmtChart(total)+'</text>';
 
-    // Month label
-    svg += '<text x="'+(x+barW/2)+'" y="'+(topPad+chartH+22)+'" text-anchor="middle" font-size="11" fill="#9aa3b5" font-family="Inter,sans-serif">'+label+'</text>';
+    // Метка месяца
+    svg += '<text x="'+(xBase+BAR+GAP/2)+'" y="'+(baseY+20)+'" text-anchor="middle" font-size="11" fill="#888780" font-family="Inter,sans-serif">'+label+'</text>';
   });
 
   svg += '</svg>';
 
-  // Легенда
-  svg = '<div style="display:flex;gap:16px;justify-content:center;margin-bottom:10px;font-size:11px;color:var(--muted)">'+
-    '<span><span style="display:inline-block;width:10px;height:10px;background:#34d399;border-radius:2px;margin-right:5px"></span>Доходы</span>'+
-    '<span><span style="display:inline-block;width:10px;height:10px;background:repeating-linear-gradient(45deg,#f87171,#f87171 2px,transparent 2px,transparent 5px);border:1px solid #f87171;border-radius:2px;margin-right:5px"></span>Расходы (доля от дохода)</span>'+
-    '</div>' + '<div style="overflow-x:auto">'+svg+'</div>';
+  const legend = '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:16px;">'
+    + '<span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)"><span style="width:11px;height:11px;background:#2563eb;border-radius:2px;display:inline-block"></span>ФЛ</span>'
+    + '<span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)"><span style="width:11px;height:11px;background:#4a3aa7;border-radius:2px;display:inline-block"></span>ЮЛ</span>'
+    + '<span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)"><span style="width:11px;height:11px;background:#15803d;border-radius:2px;display:inline-block"></span>Доход</span>'
+    + '<span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)"><span style="width:11px;height:11px;background:#dc2626;border-radius:2px;display:inline-block"></span>Расходы</span>'
+    + '</div>';
 
-  chartEl.innerHTML = svg;
+  chartEl.innerHTML = legend + '<div style="overflow-x:auto">' + svg + '</div>';
+
+
+
 
   // ═══ Чистый доход на каждого ═══
   const netEl = document.getElementById('analytics-net-chart');
   if (netEl) {
-    const maxNet = Math.max(...keys.map(k => Math.abs((monthData[k].inc - monthData[k].exp) / 2)), 1);
+    const maxNet = Math.max(...keys.map(k => Math.abs(((monthData[k].fl + monthData[k].ul) - monthData[k].exp) / 2)), 1);
     const nBarW = 56, nGap = 36, nChartH = 140, nLeftPad = 16, nTopPad = 20;
     const nChartW = keys.length * (nBarW + nGap) + nLeftPad*2;
     const zeroY = nTopPad + nChartH/2;
@@ -991,7 +1056,7 @@ function renderAnalytics() {
 
     keys.forEach((mk, idx) => {
       const d = monthData[mk];
-      const net = (d.inc - d.exp) / 2;
+      const net = (d.fl + d.ul - d.exp) / 2;
       const x = nLeftPad + idx * (nBarW + nGap);
       const h = (Math.abs(net) / maxNet) * (nChartH/2);
       const color = net >= 0 ? '#34d399' : '#f87171';
@@ -1162,6 +1227,14 @@ function deleteDebtSource(type, id) {
   renderAll();
 }
 
+function toggleIncomeCategory(id, newCat) {
+  const item = state.income.find(i => i.id === id);
+  if (!item) return;
+  item.category = newCat;
+  save();
+  renderAll();
+}
+
 function renderDebtBalance() {
   const block = document.getElementById('debt-balance-block');
   let p1owes = 0; // Руслан должен Ильнуру
@@ -1239,7 +1312,11 @@ function renderDebtBalance() {
   document.getElementById('debt-p2-details').style.display = _debtDetailsOpen.p2 ? 'block' : 'none';
 }
 
-function getAccumulatedDebt(includeManual) {
+function getAccumulatedDebt(includeAccumulated) {
+  // includeAccumulated=false → не учитываем никаких накопленных долгов
+  // только текущие расходы (currentDebtRaw) останутся в расчёте
+  if (includeAccumulated === false) return 0;
+
   let debt = 0;
   for (const dist of state.distributions) {
     const r = dist.result;
@@ -1254,12 +1331,10 @@ function getAccumulatedDebt(includeManual) {
       debt += Math.max(0, r.accountDebt - acctPaid);
     }
   }
-  if (includeManual !== false) {
-    for (const d of (state.manualDebts||[])) {
-      const dpaid = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
-      const drem = Math.max(0, d.amount - dpaid);
-      if (drem > 0.01) { if (d.debtor === 'p1') debt += drem; else debt -= drem; }
-    }
+  for (const d of (state.manualDebts||[])) {
+    const dpaid = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
+    const drem = Math.max(0, d.amount - dpaid);
+    if (drem > 0.01) { if (d.debtor === 'p1') debt += drem; else debt -= drem; }
   }
   return debt;
 }
@@ -1270,9 +1345,7 @@ function suggestDistribution() {
   // ═══ Блок "Текущая ситуация" ═══
   const situEl = document.getElementById('dist-situation');
   if (situEl) {
-    const inclManualEl = document.getElementById('include-manual-debts');
-    const inclManual = inclManualEl ? inclManualEl.checked : true;
-    // Независимые долги каждой стороны (без зачёта) для отображения
+    // Независимые долги каждой стороны — всегда показываем, независимо от галочки
     let p1owes = 0, p2owes = 0;
     for (const dist of state.distributions) {
       const r = dist.result;
@@ -1287,12 +1360,10 @@ function suggestDistribution() {
         p1owes += Math.max(0, r.accountDebt - paid);
       }
     }
-    if (inclManual) {
-      for (const d of (state.manualDebts||[])) {
-        const paid = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
-        const rem = Math.max(0, d.amount - paid);
-        if (rem > 0.01) { if (d.debtor === 'p1') p1owes += rem; else p2owes += rem; }
-      }
+    for (const d of (state.manualDebts||[])) {
+      const paid = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
+      const rem = Math.max(0, d.amount - paid);
+      if (rem > 0.01) { if (d.debtor === 'p1') p1owes += rem; else p2owes += rem; }
     }
     let sHtml = '<div class="ms-row"><span class="ml">Всего заработано</span><span class="mv green">'+fmt(totalUnsplit)+'</span></div>';
     sHtml += '<div class="ms-row"><span class="ml" style="padding-left:10px;font-size:12px;color:var(--muted)">из них наличкой в кассе</span><span class="mv" style="font-size:12px">'+fmt(cashTotal)+'</span></div>';
@@ -1423,9 +1494,10 @@ function suggestDistribution() {
     ruslanFromCash = Math.max(0, Math.floor((cashForPayouts - ilnurGrossRaw) / unit) * unit) + ilnurPaybackCash;
 
     // Руслан передаёт Ильнуру со счёта: то что сверх своей доли минус зачтённый долг
+    // + недоплаченная доля Ильнура наличкой (если наличка кончилась и не покрыла долю)
     const ruslanToIlnurRaw = Math.max(0, ilnurShareFromRuslanAcct - debtFromRuslanAcct);
-    // + недоплаченная доля Ильнура наличкой (если наличка кончилась)
-    const ilnurStillNeeded = Math.max(0, p2Income - ilnurGross - ilnurAcctTotal - debtFromRuslanAcct);
+    // ilnurStillNeeded — только то чего не хватило наличкой И не покрыто через счёт Руслана
+    const ilnurStillNeeded = Math.max(0, p2Income - ilnurGross - ilnurAcctTotal - debtFromRuslanAcct - ruslanToIlnurRaw);
     const totalRuslanToIlnur = ruslanToIlnurRaw + ilnurStillNeeded;
     ilnurFromRuslanFinal = _denom > 0 ? Math.floor(totalRuslanToIlnur / acctUnit) * acctUnit : totalRuslanToIlnur;
     cashDebtToIlnur = Math.max(0, totalRuslanToIlnur - ilnurFromRuslanFinal);
@@ -1453,6 +1525,7 @@ function suggestDistribution() {
     p1Income, p2Income, incTail,
     p1Exp, p2Exp, expDiff,
     currentDebtRaw, currentDebtorName, currentCreditorName,
+    expDiff,
     accumulated,
     debtRaw: totalDebtRaw, debtKrat, debtorName, creditorName,
     totalDebtSigned,
@@ -1536,25 +1609,25 @@ function suggestDistribution() {
   // Собираем источники долгов с обеих сторон
   const p1Sources = []; // Руслан должен Ильнуру
   const p2Sources = []; // Ильнур должен Руслану
-  for (const dist of state.distributions) {
-    const r = dist.result;
-    if (!r) continue;
-    const ts = fmtDate(dist.ts.slice(0,10));
-    if (r.debtTail && r.debtTail > 0.01 && r.debtorName) {
-      const paid = (r.payments||[]).reduce((s,p)=>s+p.amount,0);
-      const rem = Math.max(0, r.debtTail - paid);
-      if (rem > 0.01) {
-        const item = { label: 'долг от предыдущего распределения ('+ts+')', amount: rem };
-        if (r.debtorName === state.p1) p1Sources.push(item); else p2Sources.push(item);
+  if (inclManual) {
+    for (const dist of state.distributions) {
+      const r = dist.result;
+      if (!r) continue;
+      const ts = fmtDate(dist.ts.slice(0,10));
+      if (r.debtTail && r.debtTail > 0.01 && r.debtorName) {
+        const paid = (r.payments||[]).reduce((s,p)=>s+p.amount,0);
+        const rem = Math.max(0, r.debtTail - paid);
+        if (rem > 0.01) {
+          const item = { label: 'долг от предыдущего распределения ('+ts+')', amount: rem };
+          if (r.debtorName === state.p1) p1Sources.push(item); else p2Sources.push(item);
+        }
+      }
+      if (r.accountDebt && r.accountDebt > 0 && !r.accountDebtSettled) {
+        const paid = (r.acctPayments||[]).reduce((s,p)=>s+p.amount,0);
+        const rem = Math.max(0, r.accountDebt - paid);
+        if (rem > 0.01) p1Sources.push({ label: 'долг со счёта ('+ts+')', amount: rem });
       }
     }
-    if (r.accountDebt && r.accountDebt > 0 && !r.accountDebtSettled) {
-      const paid = (r.acctPayments||[]).reduce((s,p)=>s+p.amount,0);
-      const rem = Math.max(0, r.accountDebt - paid);
-      if (rem > 0.01) p1Sources.push({ label: 'долг со счёта ('+ts+')', amount: rem });
-    }
-  }
-  if (inclManual) {
     for (const d of (state.manualDebts||[])) {
       const paid = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
       const rem = Math.max(0, d.amount - paid);
@@ -2015,14 +2088,21 @@ function renderReviewModal() {
   }
   document.getElementById('review-payouts').innerHTML = payHtml;
 
-  // Остатки долгов
-  const combinedDebtVal = (d.debtTailAfterAuto || 0) + (d.cashDebtToIlnur || 0);
+  // Остатки долгов — всегда реальный остаток (накопленные + текущие − зачтено наличкой)
+  // независимо от галочки
+  const realAccumulated = getAccumulatedDebt(true); // всегда с учётом всех долгов
+  const realCurrentSigned = (d.expDiff > 0 ? -d.currentDebtRaw : d.currentDebtRaw) || 0;
+  const realTotalSigned = realAccumulated + realCurrentSigned;
+  const realTotalRaw = Math.abs(realTotalSigned);
+  const realCashApplied = d.debtAutoApply || 0;
+  const realDebtRemaining = Math.max(0, realTotalRaw - realCashApplied);
+  const realDebtorName = realTotalSigned > 0.01 ? state.p1 : realTotalSigned < -0.01 ? state.p2 : null;
+  const realCreditorName = realTotalSigned > 0.01 ? state.p2 : realTotalSigned < -0.01 ? state.p1 : null;
+
   const reviewDebtsWrap = document.getElementById('review-debts-wrap');
-  if (combinedDebtVal > 0.01) {
+  if (realDebtRemaining > 0.01 && realDebtorName) {
     reviewDebtsWrap.style.display = 'block';
-    const dn = d.debtorName || state.p1;
-    const cn = d.creditorName || state.p2;
-    let debtsHtml = `<div class="ms-row"><span class="ml"><b style="color:var(--text)">${dn}</b> должен <b style="color:var(--text)">${toDative(cn)}</b> (перенос на след. период)</span><span class="mv yellow">${fmt(combinedDebtVal)}</span></div>`;
+    let debtsHtml = `<div class="ms-row"><span class="ml"><b style="color:var(--text)">${realDebtorName}</b> должен <b style="color:var(--text)">${toDative(realCreditorName)}</b> (перенос на след. период)</span><span class="mv yellow">${fmt(realDebtRemaining)}</span></div>`;
     if (d.cashDebtToIlnur > 0.01) {
       debtsHtml += `<div class="ms-row"><span class="ml" style="font-size:11px;color:var(--muted);padding-left:10px">в т.ч. некратный остаток от распределения доходов</span><span class="mv" style="font-size:11px;color:var(--muted)">${fmt(d.cashDebtToIlnur)}</span></div>`;
     }
@@ -2420,9 +2500,12 @@ function renderFreeRow(row) {
       : row.form === 'ilnur'
       ? '<span class="type-badge" style="background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.3);color:var(--p2);font-size:9px">₽ '+state.p2+'</span>'
       : '';
+    const catTag = row.category === 'ul'
+      ? '<span class="type-badge" style="background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);color:#60a5fa;font-size:9px">ЮЛ</span>'
+      : '<span class="type-badge" style="background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.3);color:var(--green);font-size:9px">ФЛ</span>';
     return `<tr data-id="${row.id}" data-kind="income">
       <td class="mono muted-date">${row.date}</td>
-      <td><span class="type-badge income-badge">↑ Доход</span> ${formTag}</td>
+      <td><span class="type-badge income-badge">↑ Доход</span> ${catTag} ${formTag}</td>
       <td class="mono green">${fmt(row.amount)}</td>
       <td>${row.desc}</td>
       <td>${statusTag}</td>
@@ -2479,6 +2562,10 @@ function startEdit(id, kind) {
     tr.innerHTML = `
       <td><input class="edit-input dt" type="date" id="ei-date" value="${item.date}"></td>
       <td>
+        <select class="edit-input" id="ei-category" style="width:70px;padding:3px 6px">
+          <option value="fl" ${(item.category||'fl')==='fl'?'selected':''}>ФЛ</option>
+          <option value="ul" ${item.category==='ul'?'selected':''}>ЮЛ</option>
+        </select>
         <select class="edit-input" id="ei-form" style="width:120px;padding:3px 6px">
           <option value="cash" ${(item.form||'cash')==='cash'?'selected':''}>Наличка</option>
           <option value="ruslan" ${item.form==='ruslan'?'selected':''}>На счёт Руслану</option>
@@ -2545,8 +2632,10 @@ function saveEdit(id, kind) {
     const amount = parseFloat(document.getElementById('ei-amount').value) || 0;
     const desc   = document.getElementById('ei-desc').value.trim();
     const form   = document.getElementById('ei-form').value;
+    const catEl  = document.getElementById('ei-category');
+    const category = catEl ? catEl.value : (item.category || 'fl');
     if (!desc || !amount) { alert('Заполните описание и сумму'); return; }
-    item.date = date; item.amount = amount; item.desc = desc; item.form = form;
+    item.date = date; item.amount = amount; item.desc = desc; item.form = form; item.category = category;
   } else if (kind === 'expense') {
     const item = state.expenses.find(e => e.id === id);
     if (!item) return;
@@ -2603,12 +2692,18 @@ function renderGroup(dist, incItems, expItems) {
   if (isOpen) {
     // Member rows
     for (const i of incItems) {
+      const cat = i.category || 'fl';
+      const catBadge = cat === 'ul'
+        ? '<span class="type-badge" style="background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);color:#60a5fa;font-size:9px">ЮЛ</span>'
+        : '<span class="type-badge" style="background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.3);color:var(--green);font-size:9px">ФЛ</span>';
+      const nextCat = cat === 'fl' ? 'ul' : 'fl';
       html += `<tr class="group-member">
         <td class="mono muted-date">${i.date}</td>
-        <td><span class="type-badge income-badge">↑ Доход</span></td>
+        <td><span class="type-badge income-badge">↑ Доход</span> ${catBadge}</td>
         <td class="mono green">${fmt(i.amount)}</td>
         <td>${i.desc}</td>
-        <td></td><td></td>
+        <td></td>
+        <td><button class="edit-btn" title="Изменить категорию" onclick="toggleIncomeCategory(${i.id},'${nextCat}')">ФЛ/ЮЛ</button></td>
       </tr>`;
     }
     for (const e of expItems) {
@@ -2731,12 +2826,14 @@ function addIncome() {
   const desc   = document.getElementById('inc-desc').value.trim();
   const amount = parseFloat(document.getElementById('inc-amount').value) || 0;
   const form   = document.getElementById('inc-form').value;
+  const category = document.getElementById('inc-category').value;
   if (!desc || !amount) { alert('Введите описание и сумму'); return; }
-  state.income.push({ id: Date.now(), date, desc, amount, status: 'unsplit', form });
+  state.income.push({ id: Date.now(), date, desc, amount, status: 'unsplit', form, category });
   save();
   document.getElementById('inc-desc').value = '';
   document.getElementById('inc-amount').value = '';
   document.getElementById('inc-form').value = 'cash';
+  document.getElementById('inc-category').value = 'fl';
   renderAll();
 }
 

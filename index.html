@@ -1465,12 +1465,11 @@ function suggestDistribution() {
     // Руслан уже получил ruslanAcctTotal на счёт — это его частичная доля
     // Из налички нужно выплатить оставшиеся доли
 
-    // Сколько Руслан «переполучил» сверх своей доли (отрицательное = недоплатил)
+    // Сколько Руслан «переполучил» сверх своей доли (с учётом что часть его счёта идёт в общак)
     const ruslanAcctExcess = ruslanAcctTotal - p1Income; // >0 = переполучил
-
-    // Если Руслан переполучил — эту разницу он должен передать Ильнуру (или зачесть в долг)
-    // Зачёт долга через счёт Руслана: Руслан оставляет у себя min(долг, доля Ильнура) со счёта
-    const ilnurShareFromRuslanAcct = Math.max(0, ruslanAcctTotal - p1Income); // сколько сверх своей доли у Руслана
+    // Из переполучения часть уже ушла в общак (poolFromCash покрыт из налички, но если нал=0 — из счёта)
+    const poolFromRuslanAcct = Math.max(0, totalPoolAmt - cashTotal);
+    const ilnurShareFromRuslanAcct = Math.max(0, ruslanAcctTotal - p1Income - poolFromRuslanAcct);
     // Руслан может зачесть до debtKrat из доли Ильнура которая у него на счёте
     const debtFromRuslanAcct = Math.min(debtKrat, Math.floor(ilnurShareFromRuslanAcct / 1000) * 1000);
 

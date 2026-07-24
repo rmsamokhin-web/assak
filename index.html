@@ -1470,8 +1470,9 @@ function suggestDistribution() {
     // Из переполучения часть уже ушла в общак (poolFromCash покрыт из налички, но если нал=0 — из счёта)
     const poolFromRuslanAcct = Math.max(0, totalPoolAmt - cashTotal);
     const ilnurShareFromRuslanAcct = Math.max(0, ruslanAcctTotal - p1Income - poolFromRuslanAcct);
-    // Руслан может зачесть до debtKrat из доли Ильнура которая у него на счёте
-    const debtFromRuslanAcct = Math.min(debtKrat, Math.floor(ilnurShareFromRuslanAcct / 1000) * 1000);
+    // Руслан может зачесть до debtKrat из доли Ильнура которая у него на счёте (кратно выбранному номиналу)
+    const acctRoundUnit = _denom > 0 ? _denom : 1;
+    const debtFromRuslanAcct = Math.min(debtKrat, Math.floor(ilnurShareFromRuslanAcct / acctRoundUnit) * acctRoundUnit);
 
     // Остаток долга после зачёта со счёта Руслана
     const debtAfterAcct = totalDebtRaw - debtFromRuslanAcct;

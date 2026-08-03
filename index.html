@@ -6,6 +6,7 @@
 <title>Юр. Касса</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
 
@@ -655,6 +656,7 @@ function resetSessionTimer() {
   clearTimeout(_sessionTimer);
   _sessionTimer = setTimeout(() => {
     _authenticated = false;
+    firebase.auth().signOut().catch(()=>{});
     pwShowLogin();
     document.getElementById('pw-screen').classList.add('active');
     const el = document.getElementById('pw-settings-link');
@@ -667,9 +669,22 @@ function resetSessionTimer() {
   document.addEventListener(evt, resetSessionTimer, { passive: true });
 });
 
-async function pwHash(str) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+// Единый аккаунт Firebase Auth, общий для обоих партнёров.
+// Доступ к базе разрешён в Rules только для UID этого аккаунта — см. CONTEXT.md.
+const AUTH_EMAIL = 'info@samokhin-legal.ru';
+
+function authErrorMessage(e) {
+  const code = e && e.code;
+  if (code === 'auth/wrong-password' || code === 'auth/invalid-credential' || code === 'auth/invalid-login-credentials') {
+    return 'Неверный пароль';
+  }
+  if (code === 'auth/too-many-requests') {
+    return 'Слишком много попыток, подождите';
+  }
+  if (code === 'auth/network-request-failed') {
+    return 'Нет соединения с сервером';
+  }
+  return 'Ошибка входа';
 }
 
 async function pwSubmit() {
@@ -677,55 +692,40 @@ async function pwSubmit() {
   if (!val) return;
   document.getElementById('pw-error').textContent = '';
 
-  if (_pwMode === 'setup') {
-    const hash = await pwHash(val);
-    localStorage.setItem('kassa_pw', hash);
-    try { await db.ref('pw').set(hash); } catch(e) {}
-    pwUnlock();
-    renderAll();
-  } else if (_pwMode === 'change') {
-    // Меняем пароль: сначала проверяем старый
-    const hash = await pwHash(val);
-    const snap = await db.ref('pw').once('value');
-    const stored = snap.val();
-    if (hash === stored) {
-      // Показываем поле для нового пароля
+  if (_pwMode === 'change') {
+    // Проверяем текущий пароль повторным входом
+    try {
+      await _authReady;
+      await firebase.auth().signInWithEmailAndPassword(AUTH_EMAIL, val);
       _pwMode = 'change2';
       document.getElementById('pw-title').textContent = 'Новый пароль';
       document.getElementById('pw-subtitle').textContent = 'Введите новый пароль';
       document.getElementById('pw-btn').textContent = 'Сохранить';
       document.getElementById('pw-input').value = '';
-    } else {
-      document.getElementById('pw-error').textContent = 'Неверный пароль';
+    } catch (e) {
+      document.getElementById('pw-error').textContent = authErrorMessage(e);
     }
   } else if (_pwMode === 'change2') {
-    const hash = await pwHash(val);
-    await db.ref('pw').set(hash);
-    localStorage.setItem('kassa_pw', hash);
-    pwUnlock();
+    try {
+      await firebase.auth().currentUser.updatePassword(val);
+      pwUnlock();
+    } catch (e) {
+      document.getElementById('pw-error').textContent = authErrorMessage(e);
+    }
   } else {
     // Обычный вход
-    const hash = await pwHash(val);
-    // Сначала проверяем кэш
-    const cached = localStorage.getItem('kassa_pw');
-    if (cached && hash === cached) { pwUnlock(); return; }
-    // Проверяем Firebase
     try {
-      const snap = await db.ref('pw').once('value');
-      const stored = snap.val();
-      if (hash === stored) {
-        localStorage.setItem('kassa_pw', hash);
-        pwUnlock();
-      } else {
-        document.getElementById('pw-error').textContent = 'Неверный пароль';
-        document.getElementById('pw-input').value = '';
-      }
-    } catch(e) {
-      if (cached && hash === cached) { pwUnlock(); return; }
-      document.getElementById('pw-error').textContent = 'Нет соединения с сервером';
+      await _authReady;
+      await firebase.auth().signInWithEmailAndPassword(AUTH_EMAIL, val);
+      pwUnlock();
+    } catch (e) {
+      document.getElementById('pw-error').textContent = authErrorMessage(e);
+      document.getElementById('pw-input').value = '';
     }
   }
 }
+
+let _fbSyncStarted = false;
 
 function pwUnlock() {
   _authenticated = true;
@@ -734,6 +734,10 @@ function pwUnlock() {
   const el = document.getElementById('pw-settings-link');
   if (el) el.style.display = 'inline-block';
   resetSessionTimer();
+  if (!_fbSyncStarted) {
+    _fbSyncStarted = true;
+    startFirebaseSync();
+  }
   renderAll();
 }
 
@@ -747,16 +751,6 @@ function pwChangeMode() {
   document.getElementById('pw-screen').classList.add('active');
 }
 
-function pwShowSetup() {
-  _pwMode = 'setup';
-  document.getElementById('pw-title').textContent = 'Установите пароль';
-  document.getElementById('pw-subtitle').textContent = 'Придумайте пароль для входа — он сохранится в базе';
-  document.getElementById('pw-btn').textContent = 'Установить пароль';
-  document.getElementById('pw-error').textContent = '';
-  document.getElementById('pw-input').value = '';
-  document.getElementById('pw-input').focus();
-}
-
 function pwShowLogin() {
   _pwMode = 'login';
   document.getElementById('pw-title').textContent = 'Юр. Касса';
@@ -766,35 +760,9 @@ function pwShowLogin() {
   document.getElementById('pw-input').focus();
 }
 
-// Проверяем при старте — если Firebase недоступен и пароль в кэше нет, показываем экран
 function pwInit() {
   document.getElementById('pw-change-wrap').style.display = 'block';
-
-  // Если есть кэшированный хэш — сразу показываем логин
-  const cached = localStorage.getItem('kassa_pw');
-  if (cached) {
-    pwShowLogin();
-    return;
-  }
-
-  // Таймаут: если Firebase не ответил за 2 сек — показываем setup
-  const fbPwTimeout = setTimeout(() => {
-    pwShowSetup();
-  }, 2000);
-
-  db.ref('pw').once('value').then(snap => {
-    clearTimeout(fbPwTimeout);
-    if (!snap.val()) {
-      pwShowSetup();
-    } else {
-      pwShowLogin();
-    }
-  }).catch(() => {
-    clearTimeout(fbPwTimeout);
-    pwShowSetup();
-  });
-
-  document.getElementById('pw-input').focus();
+  pwShowLogin();
 }
 
 // ═══ FIREBASE ═══
@@ -809,6 +777,8 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+// Не сохраняем сессию между открытиями — пароль спрашивается при каждой загрузке страницы
+const _authReady = firebase.auth().setPersistence(firebase.auth.Auth.Persistence.NONE);
 
 function setSyncDot(s) {
   const el = document.getElementById('sync-dot');
@@ -2928,7 +2898,8 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// Подписка на Firebase — данные загружаются и рендерятся при любом изменении
+// Подписка на Firebase стартует только после входа (см. pwUnlock) —
+// до аутентификации Rules всё равно не дадут прочитать данные.
 setSyncDot('loading');
 
 let _fbConnected = false;
@@ -2946,43 +2917,44 @@ try {
       d.expenseIds = toArray(d.expenseIds);
     });
     load();
-    renderAll();
   }
 } catch(e) {}
 
 // ШАГ 2: Firebase догоняет в фоне и обновляет если есть свежие данные
-const _fbTimeout = setTimeout(() => {
-  if (!_fbConnected) {
-    console.warn('Firebase недоступен — работаем локально (localStorage)');
-    _useFirebase = false;
-    setSyncDot('ok');
-  }
-}, 3000);
+function startFirebaseSync() {
+  const _fbTimeout = setTimeout(() => {
+    if (!_fbConnected) {
+      console.warn('Firebase недоступен — работаем локально (localStorage)');
+      _useFirebase = false;
+      setSyncDot('ok');
+    }
+  }, 3000);
 
-db.ref('kassa').on('value', snap => {
-  clearTimeout(_fbTimeout);
-  _fbConnected = true;
-  _useFirebase = true;
-  const val = snap.val();
-  if (val) {
-    state = val;
-    state.income        = toArray(state.income);
-    state.expenses      = toArray(state.expenses);
-    state.distributions = toArray(state.distributions);
-    state.distributions.forEach(d => {
-      d.incomeIds  = toArray(d.incomeIds);
-      d.expenseIds = toArray(d.expenseIds);
-    });
-  }
-  load();
-  setSyncDot('ok');
-  if (_authenticated) renderAll();
-}, err => {
-  clearTimeout(_fbTimeout);
-  console.error('Firebase read error:', err);
-  _useFirebase = false;
-  setSyncDot('err');
-});
+  db.ref('kassa').on('value', snap => {
+    clearTimeout(_fbTimeout);
+    _fbConnected = true;
+    _useFirebase = true;
+    const val = snap.val();
+    if (val) {
+      state = val;
+      state.income        = toArray(state.income);
+      state.expenses      = toArray(state.expenses);
+      state.distributions = toArray(state.distributions);
+      state.distributions.forEach(d => {
+        d.incomeIds  = toArray(d.incomeIds);
+        d.expenseIds = toArray(d.expenseIds);
+      });
+    }
+    load();
+    setSyncDot('ok');
+    if (_authenticated) renderAll();
+  }, err => {
+    clearTimeout(_fbTimeout);
+    console.error('Firebase read error:', err);
+    _useFirebase = false;
+    setSyncDot('err');
+  });
+}
 
 function toArray(val) {
   if (!val) return [];

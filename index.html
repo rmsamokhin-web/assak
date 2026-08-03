@@ -585,6 +585,17 @@
     <h2>📋 Итог распределения</h2>
 
     <div class="ms">
+      <div class="ms-title">Дата распределения</div>
+      <div class="ms-block">
+        <div class="ms-row">
+          <span class="ml">Дата</span>
+          <span class="mv"><input type="date" id="dist-date-input"
+            style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 8px;font-family:'JetBrains Mono',monospace;font-size:13px;outline:none"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="ms">
       <div class="ms-title">Касса</div>
       <div class="ms-block" id="review-cash"></div>
     </div>
@@ -1856,9 +1867,12 @@ function _commitDistribution(p1Share, p2Share, _poolAmtParam, withDebtAdj) {
 
   // Используем итоговый общак (введённый + неделимый остаток)
   const poolAmt = _draft.totalPoolAmt != null ? _draft.totalPoolAmt : (_draft.poolAmt || 0);
+  const dateInput = document.getElementById('dist-date-input');
+  const distDate = dateInput && dateInput.value ? dateInput.value : today();
+  const now = new Date();
   const dist = {
     id: newDistId,
-    ts: new Date().toISOString(),
+    ts: new Date(distDate + 'T' + now.toTimeString().slice(0,8)).toISOString(),
     incomeIds: unsplitItems.map(i => i.id),
     expenseIds: personalExpItems.map(e => e.id),
     mode: 'manual',
@@ -2145,6 +2159,8 @@ function openDistModal() {
   document.getElementById('modal-debt').style.display = 'block';
   document.getElementById('modal2').style.display = 'block';
   document.getElementById('dist-modal').classList.add('open');
+  const dateInput = document.getElementById('dist-date-input');
+  if (dateInput) dateInput.value = today();
   suggestDistribution();
 }
 

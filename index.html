@@ -7,6 +7,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
 
@@ -491,13 +492,15 @@
     <!-- ДИАГРАММА -->
     <div class="ms" style="margin-top:14px">
       <div class="ms-title">📊 Доходы и расходы по месяцам</div>
-      <div id="analytics-chart" style="padding:16px 8px"></div>
+      <div id="analytics-chart-empty" style="text-align:center;color:var(--muted);padding:30px 0;display:none">Пока нет данных для отображения</div>
+      <div style="padding:16px 8px;height:280px"><canvas id="analytics-chart-canvas"></canvas></div>
     </div>
 
     <!-- ЧИСТЫЙ ДОХОД НА КАЖДОГО -->
     <div class="ms" style="margin-top:14px">
       <div class="ms-title">💵 Чистый доход на каждого</div>
-      <div id="analytics-net-chart" style="padding:16px 8px"></div>
+      <div id="analytics-net-chart-empty" style="text-align:center;color:var(--muted);padding:30px 0;display:none">Пока нет данных для отображения</div>
+      <div style="padding:16px 8px;height:220px"><canvas id="analytics-net-chart-canvas"></canvas></div>
     </div>
   </div>
 
@@ -888,6 +891,9 @@ function toDative(name) {
 
 // ═══ TAB ═══
 // ═══ ANALYTICS ═══
+let _chartMain = null;
+let _chartNet = null;
+
 function renderAnalytics() {
   const s = calc();
   renderCards(s);
@@ -907,153 +913,99 @@ function renderAnalytics() {
   }
 
   const keys = Object.keys(monthData).sort();
-  const chartEl = document.getElementById('analytics-chart');
-  if (!chartEl) return;
+  const mainWrap = document.getElementById('analytics-chart-canvas').closest('div');
+  const mainEmpty = document.getElementById('analytics-chart-empty');
+  const netWrap = document.getElementById('analytics-net-chart-canvas').closest('div');
+  const netEmpty = document.getElementById('analytics-net-chart-empty');
+
+  if (_chartMain) { _chartMain.destroy(); _chartMain = null; }
+  if (_chartNet) { _chartNet.destroy(); _chartNet = null; }
 
   if (keys.length === 0) {
-    chartEl.innerHTML = '<div style="text-align:center;color:var(--muted);padding:30px 0">Пока нет данных для отображения</div>';
+    mainWrap.style.display = 'none'; mainEmpty.style.display = 'block';
+    netWrap.style.display = 'none'; netEmpty.style.display = 'block';
     return;
   }
+  mainWrap.style.display = 'block'; mainEmpty.style.display = 'none';
+  netWrap.style.display = 'block'; netEmpty.style.display = 'none';
 
-  // Красивый график: сетка, оси, скруглённые углы, два столбика рядом на месяц
-  const maxVal = Math.max(...keys.map(k => monthData[k].fl + monthData[k].ul), 1);
-  const BAR = 44, GAP = 6, GRP = 40, CH = 200, PAD_L = 48, PAD_T = 24, PAD_B = 36;
-  const STROKE = 'rgba(150,150,150,0.18)';
-  const nw = keys.length * (BAR*2 + GAP + GRP) + PAD_L + 20;
-  const nh = CH + PAD_T + PAD_B;
-
-  // Gridlines
-  const gridSteps = [0, 0.25, 0.5, 0.75, 1];
-  let svg = '<svg viewBox="0 0 '+nw+' '+nh+'" style="width:100%;max-width:'+Math.max(nw,320)+'px;height:auto;display:block" xmlns="http://www.w3.org/2000/svg">';
-
-  // Горизонтальные линии сетки
-  gridSteps.forEach(t => {
-    const y = PAD_T + CH * (1 - t);
-    const label = Math.round(maxVal * t / 1000) + 'k';
-    svg += '<line x1="'+PAD_L+'" y1="'+y+'" x2="'+(nw-10)+'" y2="'+y+'" stroke="'+STROKE+'" stroke-width="1"/>';
-    svg += '<text x="'+(PAD_L-8)+'" y="'+(y+4)+'" text-anchor="end" font-size="10" fill="#888780" font-family="Inter,system-ui,sans-serif">'+label+'</text>';
-  });
-
-  // Ось Y
-  svg += '<line x1="'+PAD_L+'" y1="'+PAD_T+'" x2="'+PAD_L+'" y2="'+(PAD_T+CH)+'" stroke="'+STROKE+'" stroke-width="1"/>';
-
-  const R = 4; // border-radius столбиков
-
-  function roundedTop(x, y, w, h, r) {
-    if (h <= 0) return '';
-    if (h < r) r = h;
-    return '<path d="M'+(x+r)+','+y+' h'+(w-2*r)+' q'+r+',0 '+r+','+r+' v'+(h-r)+' h-'+w+' v-'+(h-r)+' q0,-'+r+' '+r+',-'+r+'z" fill="inherit"/>';
-  }
-
-  keys.forEach((mk, idx) => {
-    const d = monthData[mk];
-    const xBase = PAD_L + idx * (BAR*2 + GAP + GRP);
-    const xL = xBase;
-    const xR = xBase + BAR + GAP;
+  const labels = keys.map(mk => {
     const [yr, mo] = mk.split('-');
-    const label = MONTH_NAMES_RU[parseInt(mo,10)-1].slice(0,3) + '\u2019' + yr.slice(2);
-    const total = d.fl + d.ul;
-    const baseY = PAD_T + CH;
-
-    // === ЛЕВЫЙ: ФЛ + ЮЛ стековый ===
-    const totalH = Math.max((total / maxVal) * CH, 0);
-    const ulH = total > 0 ? (d.ul / total) * totalH : 0;
-    const flH = totalH - ulH;
-
-    // ЮЛ снизу — фиолетовый, скруглён только если ФЛ нет
-    if (ulH > 0) {
-      const needsTop = flH <= 0;
-      if (needsTop) {
-        svg += '<g fill="#4a3aa7">'+roundedTop(xL, baseY-totalH, BAR, ulH, R)+'</g>';
-      } else {
-        svg += '<rect x="'+xL+'" y="'+(baseY-ulH)+'" width="'+BAR+'" height="'+ulH+'" fill="#4a3aa7"/>';
-      }
-      if (ulH > 15) svg += '<text x="'+(xL+BAR/2)+'" y="'+(baseY-ulH/2+4)+'" text-anchor="middle" font-size="10" font-weight="500" fill="#e9d5ff" font-family="Inter,sans-serif">'+fmtChart(d.ul)+'</text>';
-    }
-    // ФЛ сверху — синий, скруглён сверху
-    if (flH > 0) {
-      svg += '<g fill="#2563eb">'+roundedTop(xL, baseY-totalH, BAR, flH, R)+'</g>';
-      if (flH > 15) svg += '<text x="'+(xL+BAR/2)+'" y="'+(baseY-totalH+flH/2+4)+'" text-anchor="middle" font-size="10" font-weight="500" fill="#dbeafe" font-family="Inter,sans-serif">'+fmtChart(d.fl)+'</text>';
-    }
-    // Разделитель ФЛ/ЮЛ
-    if (flH > 0 && ulH > 0) svg += '<rect x="'+xL+'" y="'+(baseY-ulH-1)+'" width="'+BAR+'" height="1.5" fill="rgba(255,255,255,0.2)"/>';
-
-    // === ПРАВЫЙ: доход(зелёный) + расход(красный снизу) ===
-    const incH = totalH;
-    const expH2 = Math.min((d.exp / maxVal) * CH, incH);
-    const greenH = incH - expH2;
-
-    if (incH > 0) {
-      // Зелёный (верхняя часть)
-      if (greenH > 0) {
-        svg += '<g fill="#15803d">'+roundedTop(xR, baseY-incH, BAR, greenH, R)+'</g>';
-        if (greenH > 15) svg += '<text x="'+(xR+BAR/2)+'" y="'+(baseY-incH+greenH/2+4)+'" text-anchor="middle" font-size="10" font-weight="500" fill="#dcfce7" font-family="Inter,sans-serif">'+fmtChart(total-d.exp)+'</text>';
-      }
-      // Красный снизу (расход)
-      if (expH2 > 0) {
-        const needsTopR = greenH <= 0;
-        if (needsTopR) {
-          svg += '<g fill="#dc2626">'+roundedTop(xR, baseY-expH2, BAR, expH2, R)+'</g>';
-        } else {
-          svg += '<rect x="'+xR+'" y="'+(baseY-expH2)+'" width="'+BAR+'" height="'+expH2+'" fill="#dc2626"/>';
-        }
-        if (expH2 > 15) svg += '<text x="'+(xR+BAR/2)+'" y="'+(baseY-expH2/2+4)+'" text-anchor="middle" font-size="10" font-weight="500" fill="#fee2e2" font-family="Inter,sans-serif">'+fmtChart(d.exp)+'</text>';
-      }
-      // Разделитель
-      if (greenH > 0 && expH2 > 0) svg += '<rect x="'+xR+'" y="'+(baseY-expH2-1)+'" width="'+BAR+'" height="1.5" fill="rgba(255,255,255,0.2)"/>';
-    }
-
-    // Сумма над столбиком
-    if (totalH > 0) svg += '<text x="'+(xBase+BAR+GAP/2)+'" y="'+(baseY-totalH-8)+'" text-anchor="middle" font-size="11" font-weight="500" fill="#888780" font-family="Inter,sans-serif">'+fmtChart(total)+'</text>';
-
-    // Метка месяца
-    svg += '<text x="'+(xBase+BAR+GAP/2)+'" y="'+(baseY+20)+'" text-anchor="middle" font-size="11" fill="#888780" font-family="Inter,sans-serif">'+label+'</text>';
+    return MONTH_NAMES_RU[parseInt(mo,10)-1].slice(0,3) + '’' + yr.slice(2);
   });
 
-  svg += '</svg>';
+  const gridColor = 'rgba(148,163,184,0.12)';
+  const tickColor = '#64748b';
+  const fontFamily = "'Inter', system-ui, sans-serif";
 
-  const legend = '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:16px;">'
-    + '<span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)"><span style="width:11px;height:11px;background:#2563eb;border-radius:2px;display:inline-block"></span>ФЛ</span>'
-    + '<span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)"><span style="width:11px;height:11px;background:#4a3aa7;border-radius:2px;display:inline-block"></span>ЮЛ</span>'
-    + '<span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)"><span style="width:11px;height:11px;background:#15803d;border-radius:2px;display:inline-block"></span>Доход</span>'
-    + '<span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)"><span style="width:11px;height:11px;background:#dc2626;border-radius:2px;display:inline-block"></span>Расходы</span>'
-    + '</div>';
-
-  chartEl.innerHTML = legend + '<div style="overflow-x:auto">' + svg + '</div>';
-
-
-
+  // ═══ Доходы и расходы по месяцам ═══
+  const ctxMain = document.getElementById('analytics-chart-canvas').getContext('2d');
+  _chartMain = new Chart(ctxMain, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'ФЛ', data: keys.map(k => monthData[k].fl), backgroundColor: '#6c8cff', stack: 'src', borderRadius: 4 },
+        { label: 'ЮЛ', data: keys.map(k => monthData[k].ul), backgroundColor: '#a78bfa', stack: 'src', borderRadius: 4 },
+        { label: 'Доход', data: keys.map(k => monthData[k].fl + monthData[k].ul), backgroundColor: '#34d399', stack: 'flow', borderRadius: 4 },
+        { label: 'Расход', data: keys.map(k => monthData[k].exp), backgroundColor: '#f87171', stack: 'flow2', borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 600, easing: 'easeOutQuart' },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', align: 'start', labels: { color: '#e2e8f0', boxWidth: 11, boxHeight: 11, font: { family: fontFamily, size: 12 }, padding: 16 } },
+        tooltip: {
+          backgroundColor: '#1e2436', borderColor: '#2a3048', borderWidth: 1,
+          titleColor: '#e2e8f0', bodyColor: '#e2e8f0', padding: 10, cornerRadius: 6,
+          callbacks: { label: c => c.dataset.label + ': ' + fmt(c.parsed.y) }
+        }
+      },
+      scales: {
+        x: { stacked: true, grid: { display: false }, ticks: { color: tickColor, font: { family: fontFamily, size: 11 } } },
+        y: { stacked: true, grid: { color: gridColor }, border: { display: false },
+          ticks: { color: tickColor, font: { family: fontFamily, size: 10 }, callback: v => fmtChart(v) } }
+      }
+    }
+  });
 
   // ═══ Чистый доход на каждого ═══
-  const netEl = document.getElementById('analytics-net-chart');
-  if (netEl) {
-    const maxNet = Math.max(...keys.map(k => Math.abs(((monthData[k].fl + monthData[k].ul) - monthData[k].exp) / 2)), 1);
-    const nBarW = 56, nGap = 36, nChartH = 140, nLeftPad = 16, nTopPad = 20;
-    const nChartW = keys.length * (nBarW + nGap) + nLeftPad*2;
-    const zeroY = nTopPad + nChartH/2;
-
-    let nsvg = '<svg viewBox="0 0 '+nChartW+' '+(nChartH+nTopPad+40)+'" style="width:100%;max-width:'+nChartW+'px;height:auto" xmlns="http://www.w3.org/2000/svg">';
-    nsvg += '<line x1="'+nLeftPad/2+'" y1="'+zeroY+'" x2="'+(nChartW-nLeftPad/2)+'" y2="'+zeroY+'" stroke="#2a3142" stroke-width="1"/>';
-
-    keys.forEach((mk, idx) => {
-      const d = monthData[mk];
-      const net = (d.fl + d.ul - d.exp) / 2;
-      const x = nLeftPad + idx * (nBarW + nGap);
-      const h = (Math.abs(net) / maxNet) * (nChartH/2);
-      const color = net >= 0 ? '#34d399' : '#f87171';
-      const barY = net >= 0 ? zeroY - h : zeroY;
-      const [y, m] = mk.split('-');
-      const label = MONTH_NAMES_RU[parseInt(m,10)-1].slice(0,3) + ' ' + y.slice(2);
-
-      nsvg += '<rect x="'+x+'" y="'+barY+'" width="'+nBarW+'" height="'+h+'" rx="4" fill="'+color+'"><title>Чистый доход на каждого: '+fmt(net)+'</title></rect>';
-      const textY = net >= 0 ? (barY + 16) : (barY + h - 8);
-      nsvg += '<text x="'+(x+nBarW/2)+'" y="'+textY+'" text-anchor="middle" font-size="11" font-weight="900" fill="#0a0e1a" font-family="JetBrains Mono,monospace">'+fmtChart(net)+'</text>';
-      nsvg += '<text x="'+(x+nBarW/2)+'" y="'+(nTopPad+nChartH+22)+'" text-anchor="middle" font-size="11" fill="#9aa3b5" font-family="Inter,sans-serif">'+label+'</text>';
-    });
-
-    nsvg += '</svg>';
-    netEl.innerHTML = '<div style="overflow-x:auto">'+nsvg+'</div>';
-  }
+  const netData = keys.map(k => (monthData[k].fl + monthData[k].ul - monthData[k].exp) / 2);
+  const ctxNet = document.getElementById('analytics-net-chart-canvas').getContext('2d');
+  _chartNet = new Chart(ctxNet, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Чистый доход на каждого',
+        data: netData,
+        backgroundColor: netData.map(v => v >= 0 ? '#34d399' : '#f87171'),
+        borderRadius: 4,
+        maxBarThickness: 56
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 600, easing: 'easeOutQuart' },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1e2436', borderColor: '#2a3048', borderWidth: 1,
+          titleColor: '#e2e8f0', bodyColor: '#e2e8f0', padding: 10, cornerRadius: 6,
+          callbacks: { label: c => fmt(c.parsed.y) }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: tickColor, font: { family: fontFamily, size: 11 } } },
+        y: { grid: { color: gridColor }, border: { display: false },
+          ticks: { color: tickColor, font: { family: fontFamily, size: 10 }, callback: v => fmtChart(v) } }
+      }
+    }
+  });
 }
 
 function switchTab(name, btn) {

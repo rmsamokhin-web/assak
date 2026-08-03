@@ -489,18 +489,25 @@
     <!-- ОБЩИЕ ПЛАШКИ -->
     <div class="cards" id="analytics-cards"></div>
 
+    <!-- ПЕРЕКЛЮЧАТЕЛЬ ГОДА -->
+    <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-top:14px">
+      <button class="btn ghost sm" onclick="changeAnalyticsYear(-1)">‹</button>
+      <div id="analytics-year-label" style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:600;min-width:56px;text-align:center"></div>
+      <button class="btn ghost sm" onclick="changeAnalyticsYear(1)">›</button>
+    </div>
+
     <!-- ДИАГРАММА -->
     <div class="ms" style="margin-top:14px">
       <div class="ms-title">📊 Доходы и расходы по месяцам</div>
       <div id="analytics-chart-empty" style="text-align:center;color:var(--muted);padding:30px 0;display:none">Пока нет данных для отображения</div>
-      <div style="padding:16px 8px;height:280px"><canvas id="analytics-chart-canvas"></canvas></div>
+      <div style="padding:16px 8px;height:280px;max-width:760px;margin:0 auto"><canvas id="analytics-chart-canvas"></canvas></div>
     </div>
 
     <!-- ЧИСТЫЙ ДОХОД НА КАЖДОГО -->
     <div class="ms" style="margin-top:14px">
       <div class="ms-title">💵 Чистый доход на каждого</div>
       <div id="analytics-net-chart-empty" style="text-align:center;color:var(--muted);padding:30px 0;display:none">Пока нет данных для отображения</div>
-      <div style="padding:16px 8px;height:220px"><canvas id="analytics-net-chart-canvas"></canvas></div>
+      <div style="padding:16px 8px;height:220px;max-width:760px;margin:0 auto"><canvas id="analytics-net-chart-canvas"></canvas></div>
     </div>
   </div>
 
@@ -893,12 +900,18 @@ function toDative(name) {
 // ═══ ANALYTICS ═══
 let _chartMain = null;
 let _chartNet = null;
+let _analyticsYear = new Date().getFullYear();
+
+function changeAnalyticsYear(delta) {
+  _analyticsYear += delta;
+  renderAnalytics();
+}
 
 function renderAnalytics() {
   const s = calc();
   renderCards(s);
 
-  // Группируем по месяцам с разбивкой ФЛ/ЮЛ
+  // Группируем ВСЮ историю по месяцам с разбивкой ФЛ/ЮЛ
   const monthData = {};
   for (const i of state.income) {
     const mk = monthKey(i.date);
@@ -912,16 +925,19 @@ function renderAnalytics() {
     monthData[mk].exp += e.amount;
   }
 
-  const keys = Object.keys(monthData).sort();
+  const hasAnyData = state.income.length > 0 || state.expenses.length > 0;
+
   const mainWrap = document.getElementById('analytics-chart-canvas').closest('div');
   const mainEmpty = document.getElementById('analytics-chart-empty');
   const netWrap = document.getElementById('analytics-net-chart-canvas').closest('div');
   const netEmpty = document.getElementById('analytics-net-chart-empty');
+  const yearLabel = document.getElementById('analytics-year-label');
+  if (yearLabel) yearLabel.textContent = _analyticsYear;
 
   if (_chartMain) { _chartMain.destroy(); _chartMain = null; }
   if (_chartNet) { _chartNet.destroy(); _chartNet = null; }
 
-  if (keys.length === 0) {
+  if (!hasAnyData) {
     mainWrap.style.display = 'none'; mainEmpty.style.display = 'block';
     netWrap.style.display = 'none'; netEmpty.style.display = 'block';
     return;
@@ -929,10 +945,14 @@ function renderAnalytics() {
   mainWrap.style.display = 'block'; mainEmpty.style.display = 'none';
   netWrap.style.display = 'block'; netEmpty.style.display = 'none';
 
-  const labels = keys.map(mk => {
-    const [yr, mo] = mk.split('-');
-    return MONTH_NAMES_RU[parseInt(mo,10)-1].slice(0,3) + '’' + yr.slice(2);
-  });
+  // Фиксированная сетка из 12 месяцев выбранного года — ширина столбиков не зависит
+  // от того, сколько месяцев реально заполнено данными.
+  const yearKeys = [];
+  for (let m = 1; m <= 12; m++) {
+    yearKeys.push(_analyticsYear + '-' + String(m).padStart(2, '0'));
+  }
+  const labels = yearKeys.map(mk => MONTH_NAMES_RU[parseInt(mk.split('-')[1], 10) - 1].slice(0, 3));
+  const yd = mk => monthData[mk] || { fl: 0, ul: 0, exp: 0 };
 
   const gridColor = 'rgba(148,163,184,0.12)';
   const tickColor = '#64748b';
@@ -945,14 +965,14 @@ function renderAnalytics() {
     data: {
       labels,
       datasets: [
-        { label: 'Доход', data: keys.map(k => monthData[k].fl + monthData[k].ul), backgroundColor: '#34d399', borderRadius: 4,
-          maxBarThickness: 32, barPercentage: 0.5, categoryPercentage: 0.7 }
+        { label: 'Доход', data: yearKeys.map(k => yd(k).fl + yd(k).ul), backgroundColor: '#34d399', borderRadius: 4,
+          maxBarThickness: 32, barPercentage: 0.6, categoryPercentage: 0.8 }
       ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: { duration: 600, easing: 'easeOutQuart' },
+      animation: { duration: 500, easing: 'easeOutQuart' },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -960,7 +980,7 @@ function renderAnalytics() {
           titleColor: '#e2e8f0', bodyColor: '#e2e8f0', padding: 10, cornerRadius: 6,
           callbacks: {
             label: c => {
-              const d = monthData[keys[c.dataIndex]];
+              const d = yd(yearKeys[c.dataIndex]);
               return [
                 'Доход: ' + fmt(d.fl + d.ul),
                 '  ФЛ: ' + fmt(d.fl),
@@ -980,7 +1000,7 @@ function renderAnalytics() {
   });
 
   // ═══ Чистый доход на каждого ═══
-  const netData = keys.map(k => (monthData[k].fl + monthData[k].ul - monthData[k].exp) / 2);
+  const netData = yearKeys.map(k => (yd(k).fl + yd(k).ul - yd(k).exp) / 2);
   const ctxNet = document.getElementById('analytics-net-chart-canvas').getContext('2d');
   _chartNet = new Chart(ctxNet, {
     type: 'bar',
@@ -991,13 +1011,13 @@ function renderAnalytics() {
         data: netData,
         backgroundColor: netData.map(v => v >= 0 ? '#34d399' : '#f87171'),
         borderRadius: 4,
-        maxBarThickness: 32, barPercentage: 0.5, categoryPercentage: 0.7
+        maxBarThickness: 32, barPercentage: 0.6, categoryPercentage: 0.8
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: { duration: 600, easing: 'easeOutQuart' },
+      animation: { duration: 500, easing: 'easeOutQuart' },
       plugins: {
         legend: { display: false },
         tooltip: {

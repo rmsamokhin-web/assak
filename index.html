@@ -1376,6 +1376,7 @@ function suggestDistribution() {
 
   let ilnurFromCash, ilnurFromRuslanFinal, cashDebtToIlnur;
   let ruslanFromCash = 0;        // Руслан забирает наличкой
+  let cashRoundingExtra = 0;     // остаток от округления доли Руслана кратно купюрам → в общак
   let debtAutoApply = 0;         // долг учтённый в этом распределении
   let debtTailAfterAuto = totalDebtRaw; // остаток долга
 
@@ -1402,7 +1403,9 @@ function suggestDistribution() {
     debtTailAfterAuto = totalDebtRaw - debtAutoApply;
 
     // Руслан отдаёт Ильнуру: долг из налички + долг со счёта + недостающая доля со счёта
-    ruslanFromCash = Math.max(0, Math.floor((ruslanCashAvail - debtFromCash) / unit) * unit);
+    const ruslanCashRaw1 = Math.max(0, ruslanCashAvail - debtFromCash);
+    ruslanFromCash = Math.floor(ruslanCashRaw1 / unit) * unit;
+    cashRoundingExtra = ruslanCashRaw1 - ruslanFromCash;
     const ilnurFromRuslanRaw = ilnurStillNeeded + cashRemainder + debtFromAcct;
     if (ruslanAcctTotal > 0) {
       ilnurFromRuslanFinal = Math.floor(ilnurFromRuslanRaw / acctUnit) * acctUnit;
@@ -1451,7 +1454,10 @@ function suggestDistribution() {
 
     // Руслан забирает наличкой свою наличную долю
     // (его часть наличных = cashForPayouts - то что идёт Ильнуру наличкой + возврат долга наличкой)
-    ruslanFromCash = Math.max(0, Math.floor((cashForPayouts - ilnurGrossRaw) / unit) * unit) + ilnurPaybackCash;
+    const ruslanCashRaw2 = Math.max(0, cashForPayouts - ilnurGrossRaw);
+    const ruslanFromCashBase2 = Math.floor(ruslanCashRaw2 / unit) * unit;
+    cashRoundingExtra = ruslanCashRaw2 - ruslanFromCashBase2;
+    ruslanFromCash = ruslanFromCashBase2 + ilnurPaybackCash;
 
     // Руслан передаёт Ильнуру со счёта: то что сверх своей доли минус зачтённый долг
     // + недоплаченная доля Ильнура наличкой (если наличка кончилась и не покрыла долю)
@@ -1468,7 +1474,9 @@ function suggestDistribution() {
     ilnurFromCash = _denom > 0 ? Math.floor(ilnurFromCashRaw / unit) * unit : ilnurFromCashRaw;
     const cashRemainder = ilnurFromCashRaw - ilnurFromCash;
     const ilnurStillNeeded = Math.max(0, p2Income - ilnurFromCash);
-    ruslanFromCash = Math.max(0, Math.floor((cashForPayouts - ilnurFromCashRaw) / unit) * unit);
+    const ruslanCashRaw3 = Math.max(0, cashForPayouts - ilnurFromCashRaw);
+    ruslanFromCash = Math.floor(ruslanCashRaw3 / unit) * unit;
+    cashRoundingExtra = ruslanCashRaw3 - ruslanFromCash;
     const ilnurFromRuslanRaw = ilnurStillNeeded + cashRemainder;
     if (ruslanAcctTotal > 0) {
       ilnurFromRuslanFinal = _denom > 0 ? Math.floor(ilnurFromRuslanRaw / acctUnit) * acctUnit : ilnurFromRuslanRaw;
@@ -1480,9 +1488,14 @@ function suggestDistribution() {
     debtTailAfterAuto = totalDebtRaw;
   }
 
+  // Остаток от округления доли Руслана (если есть) присоединяем к общаку —
+  // иначе эти деньги физически остаются в кассе, но нигде не учтены (ломает баланс)
+  const finalIncTail = incTail + cashRoundingExtra;
+  const finalTotalPoolAmt = totalPoolAmt + cashRoundingExtra;
+
   _draft = {
-    poolAmt, totalPoolAmt, afterPool, eachShare,
-    p1Income, p2Income, incTail,
+    poolAmt, totalPoolAmt: finalTotalPoolAmt, afterPool, eachShare,
+    p1Income, p2Income, incTail: finalIncTail,
     p1Exp, p2Exp, expDiff,
     currentDebtRaw, currentDebtorName, currentCreditorName,
     expDiff,
@@ -1496,8 +1509,8 @@ function suggestDistribution() {
   };
 
   if (poolInput) {
-    poolInput.style.borderColor = incTail > 0 ? 'var(--yellow)' : '';
-    poolInput.title = incTail > 0 ? `${fmt(poolAmt)} введено + ${fmt(incTail)} остаток = ${fmt(totalPoolAmt)}` : '';
+    poolInput.style.borderColor = finalIncTail > 0 ? 'var(--yellow)' : '';
+    poolInput.title = finalIncTail > 0 ? `${fmt(poolAmt)} введено + ${fmt(finalIncTail)} остаток = ${fmt(finalTotalPoolAmt)}` : '';
   }
 
   const sharesRowsEl = document.getElementById('dist-shares-rows');
@@ -1524,7 +1537,7 @@ function suggestDistribution() {
     (ilnurFromRuslanFinal > 0 ? '<div class="ms-row"><span class="ml" style="font-size:12px;color:var(--yellow)">'+state.p1+' должен '+toDative(state.p2)+' со счёта</span><span class="mv yellow">'+fmt(ilnurFromRuslanFinal)+'</span></div>' : '') +
     (ilnurFromRuslanFinal > 0 && debtAutoApply > 0 ? '<div class="ms-row"><span class="ml" style="font-size:11px;color:var(--muted);padding-left:10px">в т.ч. погашение долга</span><span class="mv" style="color:var(--muted);font-size:11px">'+fmt(debtAutoApply)+'</span></div>' : '') +
     (cashDebtToIlnur > 0 ? '<div class="ms-row"><span class="ml" style="font-size:12px;color:var(--red)">'+state.p1+' должен '+toDative(state.p2)+' (остаток)</span><span class="mv red">'+fmt(cashDebtToIlnur)+'</span></div>' : '') +
-    '<div class="ms-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px"><span class="ml" style="font-size:12px;color:var(--muted)">Итого в общак</span><span class="mv">'+fmt(totalPoolAmt)+'</span></div>';
+    '<div class="ms-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px"><span class="ml" style="font-size:12px;color:var(--muted)">Итого в общак</span><span class="mv">'+fmt(finalTotalPoolAmt)+'</span></div>';
   const debtsWrapEl = document.getElementById('dist-debts-wrap'); if (debtsWrapEl) debtsWrapEl.style.display = 'block';
 
   // Рендер "Зачёт расходов"

@@ -413,6 +413,19 @@
   </div>
   </div>
 
+  <!-- EXPENSES JOURNAL -->
+  <div id="journal-exp-wrap" style="display:none">
+  <div class="section">
+    <div class="journal-head">
+      <span class="journal-title">💸 Журнал расходов</span>
+      <span class="badge" id="exp-journal-count">0</span>
+      <span style="font-size:11px;color:var(--muted);cursor:pointer;margin-left:auto" onclick="switchToMainJournal()">← вернуться к операциям</span>
+    </div>
+    <div id="exp-journal-total" style="padding:10px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"></div>
+    <div id="exp-journal-body"></div>
+  </div>
+  </div>
+
   <div class="section">
     <div class="section-head" style="color:var(--green)">💰 Добавить доход</div>
     <div class="inline-form">
@@ -2183,6 +2196,7 @@ function renderAll() {
   const s = calc();
   renderCards(s);
   renderJournal();
+  renderExpJournal();
   renderDebtBalance();
   syncExpWho();
   syncSettingsNames();
@@ -2224,7 +2238,7 @@ function renderCards(s) {
       <div class="val ${s.poolBalance>=0?'green':'red'}">${fmt(s.poolBalance)}</div>
       <div class="sub">+${fmt(s.pooledInc)} −${fmt(s.poolExp)}</div>
     </div>
-    <div class="card">
+    <div class="card" style="cursor:pointer" onclick="switchToExpJournal()" title="Нажмите для просмотра журнала расходов">
       <div class="lbl">Всего расходов</div>
       <div class="val red">${fmt(s.totalExp)}</div>
       <div class="sub">${state.expenses.length} записей</div>
@@ -2236,15 +2250,107 @@ function renderCards(s) {
   if (anEl) anEl.innerHTML = html;
 }
 
+function _showJournal(which) {
+  document.getElementById('journal-main-wrap').style.display = which === 'main' ? 'block' : 'none';
+  document.getElementById('journal-pool-wrap').style.display = which === 'pool' ? 'block' : 'none';
+  document.getElementById('journal-exp-wrap').style.display = which === 'exp' ? 'block' : 'none';
+}
+
 function switchToPoolJournal() {
-  document.getElementById('journal-main-wrap').style.display = 'none';
-  document.getElementById('journal-pool-wrap').style.display = 'block';
+  _showJournal('pool');
   renderPoolJournal();
 }
 
 function switchToMainJournal() {
-  document.getElementById('journal-pool-wrap').style.display = 'none';
-  document.getElementById('journal-main-wrap').style.display = 'block';
+  _showJournal('main');
+}
+
+function switchToExpJournal() {
+  _showJournal('exp');
+  renderExpJournal();
+}
+
+const _expOpen = new Set();
+let _expInit = false;
+
+function toggleExpGroup(key) {
+  if (_expOpen.has(key)) _expOpen.delete(key); else _expOpen.add(key);
+  renderExpJournal();
+}
+
+function renderExpJournal() {
+  const body = document.getElementById('exp-journal-body');
+  if (!body) return;
+
+  const list = state.expenses.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id));
+  const total = list.reduce((s, e) => s + e.amount, 0);
+  document.getElementById('exp-journal-count').textContent = list.length;
+  document.getElementById('exp-journal-total').innerHTML =
+    '<span style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Всего расходов</span>' +
+    '<span class="mono red" style="font-size:16px;font-weight:700">' + fmt(total) + '</span>';
+
+  if (!list.length) {
+    body.innerHTML = '<div class="empty" style="padding:24px;text-align:center;color:var(--muted)">Расходов пока нет</div>';
+    return;
+  }
+
+  const years = {};
+  for (const e of list) {
+    const y = String(e.date).slice(0, 4);
+    const m = String(e.date).slice(0, 7);
+    if (!years[y]) years[y] = { sum: 0, count: 0, months: {} };
+    if (!years[y].months[m]) years[y].months[m] = { sum: 0, items: [] };
+    years[y].sum += e.amount; years[y].count++;
+    years[y].months[m].sum += e.amount;
+    years[y].months[m].items.push(e);
+  }
+
+  if (!_expInit) {
+    _expInit = true;
+    const topY = Object.keys(years).sort().reverse()[0];
+    _expOpen.add('y' + topY);
+    _expOpen.add('m' + Object.keys(years[topY].months).sort().reverse()[0]);
+  }
+
+  const groupHead = (key, level, title, count, sum) => {
+    const open = _expOpen.has(key);
+    const pad = level === 0 ? 18 : 34;
+    const bg = level === 0 ? 'var(--surface2)' : 'transparent';
+    return `<div onclick="toggleExpGroup('${key}')" style="display:flex;align-items:center;gap:10px;padding:10px 18px 10px ${pad}px;cursor:pointer;background:${bg};border-bottom:1px solid var(--border);user-select:none">
+      <span style="color:var(--muted);font-size:11px;width:10px">${open ? '▾' : '▸'}</span>
+      <span style="font-weight:${level === 0 ? 700 : 600};font-size:${level === 0 ? 14 : 13}px">${title}</span>
+      <span class="badge">${count}</span>
+      <span class="mono red" style="margin-left:auto;font-weight:600">${fmt(sum)}</span>
+    </div>`;
+  };
+
+  let html = '';
+  for (const y of Object.keys(years).sort().reverse()) {
+    const yd = years[y];
+    html += groupHead('y' + y, 0, y, yd.count, yd.sum);
+    if (!_expOpen.has('y' + y)) continue;
+    for (const m of Object.keys(yd.months).sort().reverse()) {
+      const md = yd.months[m];
+      html += groupHead('m' + m, 1, MONTH_NAMES_RU[parseInt(m.slice(5, 7), 10) - 1], md.items.length, md.sum);
+      if (!_expOpen.has('m' + m)) continue;
+      html += '<table style="margin:0"><thead><tr><th>Дата</th><th>Тип</th><th>Сумма</th><th>Описание</th><th>Кто платил</th><th></th></tr></thead><tbody>';
+      for (const row of md.items) {
+        html += `<tr data-id="${row.id}" data-kind="expense">
+          <td class="mono muted-date">${row.date}</td>
+          <td><span class="type-badge expense-badge">↓ Расход</span></td>
+          <td class="mono red">${fmt(row.amount)}</td>
+          <td>${row.desc}</td>
+          <td style="color:var(--muted);font-size:12px">${nameOf(row.who)}</td>
+          <td style="display:flex;gap:2px;align-items:center">
+            <button class="edit-btn" onclick="startEdit(${row.id},'expense')" title="Редактировать">✎</button>
+            <button class="del-btn" onclick="deleteExpense(${row.id})">×</button>
+          </td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+    }
+  }
+  body.innerHTML = html;
 }
 
 let _poolEdit = null;

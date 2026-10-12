@@ -406,7 +406,7 @@
     </div>
     <table>
       <thead><tr>
-        <th>Дата</th><th>Тип</th><th>Сумма</th><th>Описание</th><th>Баланс</th>
+        <th>Дата</th><th>Тип</th><th>Сумма</th><th>Описание</th><th>Баланс</th><th></th>
       </tr></thead>
       <tbody id="pool-journal-tbody"></tbody>
     </table>
@@ -2247,40 +2247,34 @@ function switchToMainJournal() {
   document.getElementById('journal-main-wrap').style.display = 'block';
 }
 
+let _poolEdit = null;
+
 function renderPoolJournal() {
   const tbody = document.getElementById('pool-journal-tbody');
   if (!tbody) return;
 
-  // Собираем все операции общака
   const rows = [];
 
-  // Поступления из распределений
   for (const dist of state.distributions) {
     if (dist.result && dist.result.poolAmt > 0) {
-      const d = dist.ts.slice(0, 10);
-      rows.push({ date: d, type: 'in', amount: dist.result.poolAmt, desc: 'Распределение доходов', ts: dist.ts });
+      rows.push({ kind: 'dist', id: dist.id, date: dist.ts.slice(0, 10), type: 'in', amount: dist.result.poolAmt, desc: 'Распределение доходов', ts: dist.ts });
     }
   }
-
-  // Доходы со статусом pooled
   for (const i of state.income) {
     if (i.status === 'pooled') {
-      rows.push({ date: i.date, type: 'in', amount: i.amount, desc: i.desc || '—', ts: i.date });
+      rows.push({ kind: 'income', id: i.id, date: i.date, type: 'in', amount: i.amount, desc: i.desc || '—', ts: i.date });
     }
   }
-
-  // Расходы из общака
   for (const e of state.expenses) {
     if (e.who === 'pool') {
-      rows.push({ date: e.date, type: 'out', amount: e.amount, desc: e.desc || '—', ts: e.date });
+      rows.push({ kind: 'expense', id: e.id, date: e.date, type: 'out', amount: e.amount, desc: e.desc || '—', ts: e.date });
     }
   }
 
-  // Сортировка по дате
   rows.sort((a, b) => a.ts > b.ts ? 1 : -1);
 
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty">Операций с общаком пока нет</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">Операций с общаком пока нет</td></tr>';
     return;
   }
 
@@ -2293,19 +2287,89 @@ function renderPoolJournal() {
     const typeTag = row.type === 'in'
       ? '<span class="type-badge income-badge">↑ Приход</span>'
       : '<span class="type-badge exp-badge">↓ Расход</span>';
+    const balColor = balance >= 0 ? 'var(--green)' : 'var(--red)';
+    const editing = _poolEdit && _poolEdit.kind === row.kind && _poolEdit.id === row.id;
+
+    if (editing) {
+      const descCell = row.kind === 'dist'
+        ? row.desc
+        : `<input class="edit-input" type="text" id="pe-desc" value="${String(row.desc === '—' ? '' : row.desc).replace(/"/g, '&quot;')}">`;
+      html += `<tr class="editing">
+        <td><input class="edit-input dt" type="date" id="pe-date" value="${row.date}"></td>
+        <td>${typeTag}</td>
+        <td><input class="edit-input num" type="number" id="pe-amount" value="${row.amount}" min="0"></td>
+        <td>${descCell}</td>
+        <td class="mono" style="color:${balColor};font-weight:700">${fmt(balance)}</td>
+        <td style="display:flex;gap:4px;align-items:center">
+          <button class="save-btn" onclick="savePoolEdit()">✓</button>
+          <button class="cancel-btn" onclick="cancelPoolEdit()">✕</button>
+        </td>
+      </tr>`;
+      continue;
+    }
+
     const amtColor = row.type === 'in' ? 'var(--green)' : 'var(--red)';
     const amtSign = row.type === 'in' ? '+' : '−';
-    const balColor = balance >= 0 ? 'var(--green)' : 'var(--red)';
-
     html += `<tr>
       <td class="mono muted-date">${row.date}</td>
       <td>${typeTag}</td>
       <td class="mono" style="color:${amtColor}">${amtSign}${fmt(row.amount)}</td>
       <td>${row.desc}</td>
       <td class="mono" style="color:${balColor};font-weight:700">${fmt(balance)}</td>
+      <td style="display:flex;gap:2px;align-items:center">
+        <button class="edit-btn" onclick="startPoolEdit('${row.kind}',${row.id})" title="Редактировать">✎</button>
+        <button class="del-btn" onclick="deletePoolRow('${row.kind}',${row.id})" title="Удалить">×</button>
+      </td>
     </tr>`;
   }
   tbody.innerHTML = html;
+}
+
+function startPoolEdit(kind, id) { _poolEdit = { kind, id }; renderPoolJournal(); }
+function cancelPoolEdit() { _poolEdit = null; renderPoolJournal(); }
+
+function savePoolEdit() {
+  if (!_poolEdit) return;
+  const { kind, id } = _poolEdit;
+  const date = document.getElementById('pe-date').value || today();
+  const amount = parseFloat(document.getElementById('pe-amount').value) || 0;
+  const descEl = document.getElementById('pe-desc');
+  const desc = descEl ? descEl.value.trim() : null;
+  if (!amount) { alert('Введите сумму'); return; }
+
+  if (kind === 'dist') {
+    const dist = state.distributions.find(d => d.id === id);
+    if (!dist) return;
+    dist.result.poolAmt = amount;
+    const oldTs = new Date(dist.ts);
+    const t = String(oldTs.getHours()).padStart(2,'0') + ':' + String(oldTs.getMinutes()).padStart(2,'0') + ':' + String(oldTs.getSeconds()).padStart(2,'0');
+    dist.ts = new Date(date + 'T' + t).toISOString();
+  } else if (kind === 'income') {
+    const item = state.income.find(i => i.id === id);
+    if (!item) return;
+    if (!desc) { alert('Заполните описание'); return; }
+    item.date = date; item.amount = amount; item.desc = desc;
+  } else if (kind === 'expense') {
+    const item = state.expenses.find(e => e.id === id);
+    if (!item) return;
+    if (!desc) { alert('Заполните описание'); return; }
+    item.date = date; item.amount = amount; item.desc = desc;
+  }
+  _poolEdit = null;
+  save();
+  renderAll();
+}
+
+function deletePoolRow(kind, id) {
+  if (kind === 'dist') {
+    if (!confirm('Убрать эту сумму из общака?\n\nСумма общака в этом распределении станет 0, выплаты партнёрам не изменятся. Чтобы отменить распределение целиком — используйте основной журнал.')) return;
+    const dist = state.distributions.find(d => d.id === id);
+    if (dist) { dist.result.poolAmt = 0; save(); renderAll(); }
+  } else if (kind === 'income') {
+    if (confirm('Удалить запись из общака?')) deleteIncome(id);
+  } else if (kind === 'expense') {
+    if (confirm('Удалить запись из общака?')) deleteExpense(id);
+  }
 }
 
 function renderPersons(s) {
